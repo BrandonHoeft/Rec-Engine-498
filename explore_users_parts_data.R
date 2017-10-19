@@ -3,6 +3,7 @@ if(!require(aws.s3)) {
   install.packages("aws.s3")
 }
 
+
 library(aws.s3) # https://github.com/cloudyr/aws.s3
 library(readr)
 library(lubridate)
@@ -18,29 +19,22 @@ Sys.setenv("AWS_ACCESS_KEY_ID" = "",
 # load dataset from the bucket as a csv ----------------------------------------
 
 # items data: part number, parent, catalogue, attributes/values.
-items <- s3read_using(FUN = read_tsv, 
+# parse warning, but get identical results if using read.table and comparing results with all.equal()
+items <- s3read_using(FUN = read_table2, 
+                      object = "obfuscatedItems_10_17_17.txt", 
                       col_names = TRUE,
                       col_types = "cciciiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
-                      object = "obfuscatedItems.txt", 
                       bucket = "pred498team5")
 
-# there appear to be some duplicate PartNumbers (ex. M10027855) b/c appear on 2+ catalog pages.
-# To remove duplicates, within each PartNumber/Parent combination, sort so that 
-# the duplicate with the most item details is slotted first. Then use the 
-# distinct() to keep first duplicate within sorted PartNumber/Parent combo.
-items <- items %>%
-  mutate(row_element_val_count = rowSums(!is.na(.))) %>%
-  group_by(PartNumber, Parent) %>%
-  arrange(desc(row_element_val_count)) %>%
-  # remove doops in PartNumber, Parent, keeping doop w/most complete data. 
-  distinct(PartNumber, Parent, .keep_all = TRUE) %>%
-  ungroup()
+# all rows are unique PartNumbers.
+length(unique(items$PartNumber))  == nrow(items)
 
-# user click data from the company website and how they interacted with parts. 
-users <- s3read_using(FUN = read_tsv, 
+# user click data from the company website for a random day of user's selected,
+# their activity for past 3 months, and click summaries of how they interacted with parts. 
+users <- s3read_using(FUN = read_table2, 
                       col_names = TRUE,
                       col_types = "ccici",
-                      object = "obfuscatedWebActivity.txt", 
+                      object = "obfuscatedWebActivity_10_16_17.txt", 
                       bucket = "pred498team5")
 
 # left join the parent group to the users part number.
@@ -251,12 +245,23 @@ user_items %>%
 #     implicit rating value. This maybe needs to consider the action date, when figuring out 
 #     a single session for a specific Parent number for that visitor.
 #     For each time that the visitor has interacted with the specific Parent Family on a given day:
-  #     step 1) take the value of the highest Action ID by the visitor for that Parent Family.
-  #     step 2) multiply it by its Action Count. 
-  #     step 3) We now have this value on a daily basis per Parent per Visitor. Sum the values up
-  #       per Parent per Visitor (summing values across days). Intuition: If the visitor 
-  #       has had repeat actions with the Parent over many different sessions/days, 
-  #       we can interpret that as they rate that part very highly. 
-  #     step 4) Some ratings will be very high, so we need a function to cap or limit the 
-  #       upper bound rating (ex. log scale transform) or maybe just cap it at a cutoff
-  #       value that makes sense given the distribution of the weighted ratings per Parent Family per User.
+#     step 1) take the value of the highest Action ID by the visitor for that Parent Family.
+#     step 2) multiply it by its Action Count. 
+#     step 3) We now have this value on a daily basis per Parent per Visitor. Sum the values up
+#       per Parent per Visitor (summing values across days). Intuition: If the visitor 
+#       has had repeat actions with the Parent over many different sessions/days, 
+#       we can interpret that as they rate that part very highly. 
+#     step 4) Some ratings will be very high, so we need a function to cap or limit the 
+#       upper bound rating (ex. log scale transform) or maybe just cap it at a cutoff
+#       value that makes sense given the distribution of the weighted ratings per Parent Family per User.
+
+# Taylor's Data Wrangling ------------------------------------------------------
+# Does anyone have any tips for sorting through the data to find items with matching 
+# attributes? I’ve been looking for documentation on how to search rows in a df 
+# for two consecutive values (which would be the attribute and the value in our case) 
+# that aren’t necessarily in the same column in each row.
+# Sorting through items, and finding matching attributes
+install.packages("tidyr")
+library(tidyr)
+items_tidy <- items %>%
+  gather(starts_with("Attr"), starts_with("Val"), -PartNumber, - Parent, -CatalogNumber, -CatalogPage)
