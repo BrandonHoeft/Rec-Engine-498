@@ -222,7 +222,6 @@ user_items %>%
   arrange(ActionId)
 
 
-
 user_items %>%
   distinct(VisitorId, PartNumber) %>%
   summarise(n())
@@ -232,13 +231,32 @@ user_items %>%
   summarise(n())
 
 # Things to Think About:
-# 1) How to rank different actions for a Visitor's interaction with a Parent or PartNumber?
-# 2) How to handle duplicity per Visitor of a Parent or a PartNumber?
+# a) How to rank different actions for a Visitor's interaction with a Parent or PartNumber?
+#   Answer: actions #1,4,5,6 should be treated as equal weight. then #3 next important, and #2 is basic. 
+# b) How to handle duplicity of a Parent or a PartNumber for a Visitor?
 #     For example, if User #1, has repeat actions many times with the same Parent, 
-#     do we just take the highest ActionID value (whatever is closest to a purchase)
-#     or do we add a weight factor for repeats?
-#     Maybe there can be 2 different model approaches here: 1 model just looks at the 
-#     most material action the Visitor has had with a Parent. 1 model first weights
-#     how many times they've interacted with that part as part of the implicit weighting.
-#       This 2nd model, maybe needs to consider the action date, when figuring out 
-#       a single session for a specific Parent group.
+#     do we just take the highest ActionID value (whatever is closest to a purchase)?
+#     Do we add a weight factor for repeat sessions with that exact Parent number?
+
+#   Answer: Maybe there can be 3 different model approaches here for ratings structure: 
+
+#     1) unary rating: whether or not a visitor interacted with an item within the 3 month span.
+#       1 = interaction, missings filled with 0.
+
+#     2) model just looks at the most material action the Visitor has had with a 
+#     Parent ever across all separate interactions with that parent and goes with that rating.
+#     example: 1 (ActionID = 2), 2 (ActionID = 3), 3 (Action ID includes(1,4,5,6))
+
+#     3) the model takes repeat sessions with a Parent Number into account in weighting the
+#     implicit rating value. This maybe needs to consider the action date, when figuring out 
+#     a single session for a specific Parent number for that visitor.
+#     For each time that the visitor has interacted with the specific Parent Family on a given day:
+  #     step 1) take the value of the highest Action ID by the visitor for that Parent Family.
+  #     step 2) multiply it by its Action Count. 
+  #     step 3) We now have this value on a daily basis per Parent per Visitor. Sum the values up
+  #       per Parent per Visitor (summing values across days). Intuition: If the visitor 
+  #       has had repeat actions with the Parent over many different sessions/days, 
+  #       we can interpret that as they rate that part very highly. 
+  #     step 4) Some ratings will be very high, so we need a function to cap or limit the 
+  #       upper bound rating (ex. log scale transform) or maybe just cap it at a cutoff
+  #       value that makes sense given the distribution of the weighted ratings per Parent Family per User.
