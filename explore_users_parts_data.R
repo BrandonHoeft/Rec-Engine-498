@@ -44,14 +44,6 @@ user_items <- users %>%
   mutate(ActionDate = ymd(ActionDate)) %>% # parse into a date format.
   select(-starts_with("Val"), -starts_with("Attr"), -starts_with("Catalog"))
 
-# create labels for ActionId
-user_items$ActionId_label <- factor(user_items$ActionId, 
-                                    labels = c("add to order", "select Part",
-                                               "select Part detail",
-                                               "print detail",
-                                               "save CAD drawing detail",
-                                               "print CAD drawing detail"))
-
 all.equal(users[1:3], user_items[1:3]) # users matches the first 3 columns after join. 
 remove(users)
 remove(items)
@@ -209,7 +201,26 @@ user_items %>%
 
 
 ################################################################################
-## Exploratory Analysis About User Actions
+## Data Wrangling of the User Actions 
+################################################################################
+
+# create labels for ActionId
+user_items <- user_items %>%
+        # convert raw ActionId into labeled values. 
+  mutate(ActionId_label = factor(user_items$ActionId, 
+                                    labels = c("add to order", "select Part",
+                                               "select Part detail",
+                                               "print detail",
+                                               "save CAD drawing detail",
+                                               "print CAD drawing detail")),
+         # categorize the 6 actions into 3 ratings, based on similarity.
+         # order from lowest to highest implicit rating. implicit to a purchase event.
+         # 1 = basic, 2 = moderate, 3 = close to a purchase or high interest to visitor. 
+         ActionId_3cat = if_else(ActionId_label == "select Part", 1, 
+                                 if_else(ActionId_label == "select Part detail", 2, 3)))
+
+################################################################################
+## Exploratory Analysis of the User Actions 
 ################################################################################
 
 # How do the different action types distribute across all interactions ? -------
@@ -218,34 +229,38 @@ user_items %>%
   summarize(frequency = n()) %>%
   arrange(ActionId)
 
+# Bar graph of the 6 different Action ID Labels
 user_items %>%
   group_by(ActionId, ActionId_label) %>%
   summarize(frequency = n()) %>%
   ggplot(aes(x = reorder(ActionId_label, desc(frequency)), y = frequency)) +
     geom_bar(aes(fill = ActionId_label), stat = "identity") +
-    labs(title = "Distribution of different Actions taken by Users",
+    labs(title = "Distribution of 6 different Actions taken by Users",
          x = NULL) +
     guides(fill=FALSE) + # remove legend
     theme(axis.text.x=element_text(angle=25,hjust=1)) + # tilt x labels
     scale_y_continuous(labels = function(n) format(n, scientific = FALSE)) # raw frequency scale
-  
-  
-  
-user_items %>%
-  ggplot(aes(x = ActionId_label)) +
-  geom_bar()
 
-
-# Other ------------------------------------------------------------------------
-user_items %>%
-  distinct(VisitorId, PartNumber) %>%
-  summarise(n())
 
 user_items %>%
-  distinct(VisitorId, Parent, ActionId) %>%
-  summarise(n())
+  group_by(ActionId_3cat) %>%
+  summarize(frequency = n())
 
-# Things to Think About:
+# Bar graph of the condensed categories from 6 to 3. To be used for ratings matrix.
+user_items %>%
+  group_by(ActionId_3cat) %>%
+  summarize(frequency = n()) %>%
+  ggplot(aes(x = ActionId_3cat, y = frequency)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Distribution of Implicit Action Rating taken by Users",
+       subtitle = "1 = low, 2 = medium, 3 = high rating",
+       x = NULL) +
+  guides(fill=FALSE) + # remove legend
+  scale_y_continuous(labels = function(n) format(n, scientific = FALSE)) # raw frequency scale
+
+
+
+# Things to Think About --------------------------------------------------------
 # a) How to rank different actions for a Visitor's interaction with a Parent or PartNumber?
 #   Answer: actions #1,4,5,6 should be treated as equal weight. then #3 next important, and #2 is basic. 
 # b) How to handle duplicity of a Parent or a PartNumber for a Visitor?
@@ -275,14 +290,3 @@ user_items %>%
 #     step 4) Some ratings will be very high, so we need a function to cap or limit the 
 #       upper bound rating (ex. log scale transform) or maybe just cap it at a cutoff
 #       value that makes sense given the distribution of the weighted ratings per Parent Family per User.
-
-# Taylor's Data Wrangling ------------------------------------------------------
-# Does anyone have any tips for sorting through the data to find items with matching 
-# attributes? I’ve been looking for documentation on how to search rows in a df 
-# for two consecutive values (which would be the attribute and the value in our case) 
-# that aren’t necessarily in the same column in each row.
-# Sorting through items, and finding matching attributes
-install.packages("tidyr")
-library(tidyr)
-items_tidy <- items %>%
-  gather(starts_with("Attr"), starts_with("Val"), -PartNumber, - Parent, -CatalogNumber, -CatalogPage)
