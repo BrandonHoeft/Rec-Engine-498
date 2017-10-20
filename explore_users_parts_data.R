@@ -216,7 +216,7 @@ user_items <- user_items %>%
          # categorize the 6 actions into 3 ratings, based on similarity.
          # order from lowest to highest implicit rating. implicit to a purchase event.
          # 1 = basic, 2 = moderate, 3 = close to a purchase or high interest to visitor. 
-         ActionId_3cat = if_else(ActionId_label == "select Part", 1, 
+         action_rating = if_else(ActionId_label == "select Part", 1, 
                                  if_else(ActionId_label == "select Part detail", 2, 3)))
 
 ################################################################################
@@ -248,9 +248,9 @@ user_items %>%
 
 # Bar graph of the condensed categories from 6 to 3. To be used for ratings matrix.
 user_items %>%
-  group_by(ActionId_3cat) %>%
+  group_by(action_rating) %>%
   summarize(frequency = n()) %>%
-  ggplot(aes(x = ActionId_3cat, y = frequency)) +
+  ggplot(aes(x = action_rating, y = frequency)) +
   geom_bar(stat = "identity") +
   labs(title = "Distribution of Implicit Action Rating taken by Users",
        subtitle = "1 = low, 2 = medium, 3 = high rating",

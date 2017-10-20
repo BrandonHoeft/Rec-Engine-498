@@ -72,7 +72,7 @@ user_items <- user_items %>%
          # categorize the 6 actions into 3 ratings, based on similarity.
          # order from lowest to highest implicit rating. implicit to a purchase event.
          # 1 = basic, 2 = moderate, 3 = close to a purchase or high interest to visitor. 
-         ActionId_3cat = if_else(ActionId_label == "select Part", 1, 
+         action_rating = if_else(ActionId_label == "select Part", 1, 
                                  if_else(ActionId_label == "select Part detail", 2, 3)))
 
 user_items %>%
@@ -81,13 +81,34 @@ user_items %>%
   arrange(ActionId)
 
 user_items %>%
-  group_by(ActionId_3cat) %>%
+  group_by(action_rating) %>%
   summarize(frequency = n())
 
+# select a sample of Visitor's and their user activity.
 preview <- user_items %>%
+  select(VisitorId, Parent, ActionDate, starts_with("Action")) %>%
   arrange(VisitorId, Parent, ActionDate) %>%
   slice(1:1000)
+View(preview)
 
+# Analyze each Visitor Session with a Parent Part#. 
+preview2 <- preview %>%
+  # create window for each visitor's session with a Parent Part#, each day. 
+  group_by(VisitorId, Parent, ActionDate) %>%
+  # w/in window, keep row of max action_rating for that specific session. 
+  filter(action_rating == max(action_rating)) %>%
+  arrange(VisitorId, Parent, ActionDate) %>%
+  # w/in window, weight the rating by a factor of X times they performed max action_rating.
+  # ex. if the highest rating for that session was 1 (selected part),
+  # but did it 4 times during that day's session, then weighted rating = 1 x 4.
+  mutate(wt_action_rating = action_rating * ActionCount) %>%
+  ungroup()
 
+# per Parent per Visitor, sum the wt_action_rating across days. 
+# Intuition: If the visitor has had repeat actions with the Parent over many 
+# different sessions/days, we can interpret that as they rate that part very highly. 
+
+user_items %>%
+  filter(ActionId == 1 & ActionCount > 1)
 
 ################################################################################
