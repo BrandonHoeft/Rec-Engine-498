@@ -9,9 +9,12 @@
 
 library(tidyr)
 library(dplyr)
+install.packages("slam")
+#library(slam) # for sparse matrices
+
 
 set.seed(2)
-items <- data.frame(PartNumber = c(letters[10:19]),
+temp_df <- data.frame(PartNumber = c(letters[10:19]),
                     Attr1 = sample(1:20, size = 10, replace = TRUE), 
                     Val1 = sample(90:100, size = 10, replace = TRUE), 
                     Attr2 = sample(1:20, size = 10, replace = TRUE), 
@@ -26,7 +29,7 @@ items <- data.frame(PartNumber = c(letters[10:19]),
 
 #items_attr_value_matrix <- 
 
-df <- items %>%
+df <- temp_df %>%
   # tidy the different attributes columns into a single column.
   gather(attribute_position, attribute_number, starts_with("attr"), -PartNumber) %>%
   # tidy the different values columns into a single column. 
@@ -40,13 +43,15 @@ df <- items %>%
   arrange(PartNumber) %>%
   # combine the attribute# and value# into a single measure.
   unite(attr_value, attribute_number, value_number, sep = ":") %>%
-  spread(attr_value, attr_value, fill = 0) 
+  spread(attr_value, attr_value) 
+
+
+# a couple ways to convert into an indicator matrix:
+df %>%
+  mutate_at(2:ncol(.), funs(ifelse(!is.na(.), 1, .)))
 
 df %>%
-  mutate_at(2:ncol(.), funs(ifelse(. != 0, 1, .)))
-
-df %>%
-  mutate_at(2:ncol(.), funs(ifelse(is.na(.), 0, 1)))
+  mutate_at(2:ncol(.), function(x) {ifelse(!is.na(x), 1, x)}) 
 
 
 # with the items dataset -------------------------------------------------------
@@ -70,7 +75,7 @@ items <- s3read_using(FUN = read_table2,
 
 
 # tried this with the first 5 Attribute/value columns to start
-indicator_matrix <- items %>%
+items_long <- items %>%
   select(PartNumber, Attr1:Val5) %>%
   # tidy the different attributes columns into a single column.
   gather(attribute_position, attribute_number, starts_with("Attr"), -PartNumber, 
@@ -86,7 +91,10 @@ indicator_matrix <- items %>%
   select(PartNumber, attribute_number, value_number) %>%
   unite(attr_value, attribute_number, value_number, sep = ":") 
 
-%>%
+# Errors generate due to size of object.
+items_long %>%
   spread(attr_value, attr_value) %>%
-  mutate_at(2:ncol(.), funs(ifelse(is.na(.), 0, 1)))
+  mutate_at(2:ncol(.), function(x) {ifelse(!is.na(x), 1, x)}) %>%
+  as.matrix()
   
+
