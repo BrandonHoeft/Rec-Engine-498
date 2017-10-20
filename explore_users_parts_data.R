@@ -9,6 +9,7 @@ library(readr)
 library(lubridate)
 library(dplyr)
 library(ggplot2)
+library(pryr) # memory usage functions
 
 
 # specify keys as environment variables so I can read my s3 object(s) from AWS.
@@ -41,8 +42,15 @@ users <- s3read_using(FUN = read_table2,
 user_items <- users %>%
   left_join(items, by = "PartNumber") %>%
   mutate(ActionDate = ymd(ActionDate)) %>% # parse into a date format.
-  select(-starts_with("Val"), -starts_with("Attr"), -starts_with("Catalog"), 
-         -row_element_val_count) # only keep user fields, and 'Parent' from items.
+  select(-starts_with("Val"), -starts_with("Attr"), -starts_with("Catalog"))
+
+# create labels for ActionId
+user_items$ActionId_label <- factor(user_items$ActionId, 
+                                    labels = c("add to order", "select Part",
+                                               "select Part detail",
+                                               "print detail",
+                                               "save CAD drawing detail",
+                                               "print CAD drawing detail"))
 
 all.equal(users[1:3], user_items[1:3]) # users matches the first 3 columns after join. 
 remove(users)
@@ -54,19 +62,14 @@ remove(items)
 
 
 # How many Different Users are in the dataset? ---------------------------------
-user_items %>%
-  distinct(VisitorId) %>% 
-  summarize(n())
+unique(user_items$VisitorId) %>% length()
+
 
 # How many distinct PartNumber's are in the dataset? ---------------------------
-user_items %>%
-  distinct(PartNumber) %>% 
-  summarize(n())
+unique(user_items$PartNumber) %>% length()
 
 # How many distinct Parent Family's of PartNumbers are in the dataset? ---------
-user_items %>%
-  distinct(Parent) %>% 
-  summarize(n())
+unique(user_items$Parent) %>% length()
 
 
 # How do total Action Counts of each different users distribute? ---------------
@@ -211,11 +214,29 @@ user_items %>%
 
 # How do the different action types distribute across all interactions ? -------
 user_items %>%
-  group_by(ActionId) %>%
+  group_by(ActionId, ActionId_label) %>%
   summarize(frequency = n()) %>%
   arrange(ActionId)
 
+user_items %>%
+  group_by(ActionId, ActionId_label) %>%
+  summarize(frequency = n()) %>%
+  ggplot(aes(x = reorder(ActionId_label, desc(frequency)), y = frequency)) +
+    geom_bar(aes(fill = ActionId_label), stat = "identity") +
+    labs(title = "Distribution of different Actions taken by Users",
+         x = NULL) +
+    guides(fill=FALSE) + # remove legend
+    theme(axis.text.x=element_text(angle=25,hjust=1)) + # tilt x labels
+    scale_y_continuous(labels = function(n) format(n, scientific = FALSE)) # raw frequency scale
+  
+  
+  
+user_items %>%
+  ggplot(aes(x = ActionId_label)) +
+  geom_bar()
 
+
+# Other ------------------------------------------------------------------------
 user_items %>%
   distinct(VisitorId, PartNumber) %>%
   summarise(n())
