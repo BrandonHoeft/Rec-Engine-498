@@ -86,7 +86,7 @@ user_items %>%
 
 # select a sample of Visitor's and their user activity.
 preview <- user_items %>%
-  select(VisitorId, Parent, ActionDate, starts_with("Action")) %>%
+  select(VisitorId, Parent, PartNumber, ActionDate, starts_with("Action")) %>%
   arrange(VisitorId, Parent, ActionDate) %>%
   slice(1:1000)
 View(preview)
@@ -95,7 +95,7 @@ View(preview)
 preview2 <- preview %>%
   # create window for each visitor's session with a Parent Part#, each day. 
   group_by(VisitorId, Parent, ActionDate) %>%
-  # w/in window, keep row of max action_rating for that specific session. 
+  # w/in window, keep row of max action_rating for that specific session.
   filter(action_rating == max(action_rating)) %>%
   arrange(VisitorId, Parent, ActionDate) %>%
   # w/in window, weight the rating by a factor of X times they performed max action_rating.
@@ -108,7 +108,7 @@ preview2 <- preview %>%
 # Intuition: If the visitor has had repeat actions with the Parent over many 
 # different sessions/days, we can interpret that as they rate that part very highly. 
 
-user_items %>%
-  filter(ActionId == 1 & ActionCount > 1)
+preview2 %>%
+  filter(ActionId == 1 & ActionCount > 1) %>% View()
 
 ################################################################################
