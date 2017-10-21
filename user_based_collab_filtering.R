@@ -11,7 +11,7 @@ library(pryr) # memory usage functions
 Sys.setenv("AWS_ACCESS_KEY_ID" = "",
            "AWS_SECRET_ACCESS_KEY" = "")
 
-################################################################################
+
 # Read obfuscatedItems_10_17_17.txt & obfuscatedWebActivity_10_16_17.txt from S3 ------
 
 # items data: part number, parent, catalogue, attributes/values.
@@ -43,17 +43,17 @@ remove(items)
 # save an in-memory R object into S3
 s3save(user_items, bucket = "pred498team5", object = "user_items.Rdata")
 
-################################################################################
 
 
-################################################################################
+
+
 # load the user_items.Rdata object from S3. ------------------------------------
 # This is the data wrangled from lines 14-44. Loads the user_items dataframe. 
 s3load("user_items.Rdata", bucket = "pred498team5")
-################################################################################
 
 
-################################################################################
+
+
 # Create Action Labels and convert to 1-2-3 Ratings scale in user_items --------
 # see explore_users_parts_data.R, lines 206 - 262 for analysis.
 
@@ -83,10 +83,12 @@ user_items %>%
   group_by(action_rating) %>%
   summarize(frequency = n())
 
-################################################################################
 
 
-################################################################################
+
+
+
+
 # Sample pre-processing of ratings data (1000 rows) to see if it works----------
 update <- user_items %>%
   select(VisitorId, Parent, PartNumber, ActionDate, starts_with("Action")) %>%
@@ -163,10 +165,10 @@ update5 %>%
     geom_histogram(binwidth = max(value) - min(value), colour = "black") +
     facet_wrap(~ rating_type)
 
-################################################################################
 
 
-################################################################################
+
+
 # Full pre-processing of ratings data ------------------------------------------
 user_ratings <- user_items %>%
   select(VisitorId, Parent, ActionDate, action_rating) %>%
@@ -209,12 +211,44 @@ tidy_ratings <- user_ratings %>%
 
 tidy_ratings %>%
   ggplot(aes(value, fill = rating_type)) +
-  geom_histogram(data = subset(tidy_ratings, rating_type == "total_rating"), binwidth = 20, color = "black") + 
-  geom_histogram(data = subset(tidy_ratings, rating_type != "total_rating"), binwidth = 1, color = "black") + 
+  geom_histogram(data = filter(tidy_ratings, rating_type == "total_rating"), binwidth = 10, color = "black") + 
+  geom_histogram(data = filter(tidy_ratings, rating_type != "total_rating"), binwidth = 1, color = "black") + 
   facet_wrap(~ rating_type, scales = "free") +
-  labs(title = "Parent Family# Total Rating Distribution per Each Visitor",
-       subtitle = "with different scale transformations")
+  labs(title = "Distribution of Visitors' Total Rating of Parent Part Families",
+       subtitle = "with different rating transformations")
 
 remove(tidy_user_ratings)
 
-################################################################################
+
+
+# Convert user_ratings into a sparseMatrix -------------------------------------
+library(Matrix)
+
+# https://stackoverflow.com/questions/28430674/create-sparse-matrix-from-data-frame?noredirect=1&lq=1
+# the VisitorId and Parent need to be 1 based indices when creating a matrix. 
+# Per ?factor, the levels of a factor are by default sorted.
+sparse_r <- sparseMatrix(i = as.integer(as.factor(user_ratings$VisitorId)),
+                         j = as.integer(as.factor(user_ratings$Parent)),
+                         x = user_ratings$total_rating_max10)
+
+# can rename the matrix row and column labels with unique VisitorId and Parent names. 
+dimnames(sparse_r) <- list(sort(unique(user_ratings$VisitorId)),
+                           sort(unique(user_ratings$Parent)))
+
+# check that the order of factor levels and dimnames passed to indices are the same. 
+all.equal(levels(as.factor(user_ratings$VisitorId)), # line 230
+          sort(unique(user_ratings$VisitorId))) # line 235
+all.equal(levels(as.factor(user_ratings$Parent)), # line 231
+          sort(unique(user_ratings$Parent))) # line 236
+
+class(sparse_r)
+dim(sparse_r)
+attributes(sparse_r)
+str(sparse_r) # it's an S4 object. use slots (@) to access elements. 
+
+# Bring sparse ratings matrix into Recommenderlab ------------------------------
+library(recommenderlab)
+
+# coercse sparseMatrix into a realRatingMatrix object
+r <- as(sparse_r, "realRatingMatrix")
+
