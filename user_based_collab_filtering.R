@@ -8,8 +8,8 @@ library(pryr) # memory usage functions
 
 # specify keys as environment variables so I can read my s3 object(s) from AWS.
 # Your unique access key/secret needs to be passed before running the queries below. 
-Sys.setenv("AWS_ACCESS_KEY_ID" = "AKIAJIQ4KNO6NIZ446YQ",
-           "AWS_SECRET_ACCESS_KEY" = "epPIP2wVCrZCr3XaF5M8Ugz9rGpv6sc/wDCY4CQ4")
+Sys.setenv("AWS_ACCESS_KEY_ID" = "",
+           "AWS_SECRET_ACCESS_KEY" = "")
 
 ################################################################################
 # Read obfuscatedItems_10_17_17.txt & obfuscatedWebActivity_10_16_17.txt from S3 ------
