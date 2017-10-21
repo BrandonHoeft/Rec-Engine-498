@@ -2,13 +2,14 @@ library(aws.s3) # https://github.com/cloudyr/aws.s3
 library(readr)
 library(lubridate)
 library(dplyr)
+library(tidyr)
 library(ggplot2)
 library(pryr) # memory usage functions
 
 # specify keys as environment variables so I can read my s3 object(s) from AWS.
 # Your unique access key/secret needs to be passed before running the queries below. 
-Sys.setenv("AWS_ACCESS_KEY_ID" = "",
-           "AWS_SECRET_ACCESS_KEY" = "")
+Sys.setenv("AWS_ACCESS_KEY_ID" = "AKIAJIQ4KNO6NIZ446YQ",
+           "AWS_SECRET_ACCESS_KEY" = "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")
 
 ################################################################################
 # Read obfuscatedItems_10_17_17.txt & obfuscatedWebActivity_10_16_17.txt from S3 ------
@@ -51,13 +52,12 @@ s3save(user_items, bucket = "pred498team5", object = "user_items.Rdata")
 # This is the data wrangled from lines 14-44. Loads the user_items dataframe. 
 s3load("user_items.Rdata", bucket = "pred498team5")
 
-
 ################################################################################
 
 
 
 ################################################################################
-# Pre-process the Ratings data in user_items -----------------------------------
+# Create Action Labels and convert to 1-2-3 Ratings scale in user_items --------
 # see explore_users_parts_data.R, lines 206 - 262 for analysis.
 
 # create labels for ActionId
@@ -84,31 +84,83 @@ user_items %>%
   group_by(action_rating) %>%
   summarize(frequency = n())
 
-# select a sample of Visitor's and their user activity.
-preview <- user_items %>%
+################################################################################
+
+################################################################################
+# Sample pre-processing of ratings data (1000 rows) to see if it works----------
+update <- user_items %>%
   select(VisitorId, Parent, PartNumber, ActionDate, starts_with("Action")) %>%
   arrange(VisitorId, Parent, ActionDate) %>%
   slice(1:1000)
-View(preview)
 
-# Analyze each Visitor Session with a Parent Part#. 
-preview2 <- preview %>%
+
+# Step 1: Analyze each Visitor Session (day) with a Parent# and extract max action. 
+update2 <- update %>%
   # create window for each visitor's session with a Parent Part#, each day. 
   group_by(VisitorId, Parent, ActionDate) %>%
-  # w/in window, keep row of max action_rating for that specific session.
+  # w/in window, keep row(s) of max action_rating for that specific session.
   filter(action_rating == max(action_rating)) %>%
   arrange(VisitorId, Parent, ActionDate) %>%
-  # w/in window, weight the rating by a factor of X times they performed max action_rating.
-  # ex. if the highest rating for that session was 1 (selected part),
-  # but did it 4 times during that day's session, then weighted rating = 1 x 4.
-  mutate(wt_action_rating = action_rating * ActionCount) %>%
   ungroup()
 
-# per Parent per Visitor, sum the wt_action_rating across days. 
-# Intuition: If the visitor has had repeat actions with the Parent over many 
-# different sessions/days, we can interpret that as they rate that part very highly. 
+# Step2: within Visitor Session with Parent#, sum up all max action_ratings to 
+# account for >1 max actions with diff. PartNumbers of that Parent# during session. Additive weight. 
+update3 <- update2 %>%
+  # create window for each visitor's session with a Parent Part#, each day.
+  select(-ActionCount) %>%
+  group_by(VisitorId, Parent, ActionDate) %>%
+  # w/in window, keep row of max action_rating for that specific session.
+  # There may be doops per Visitor session (day) with specific Parent b/c there 
+  # could be multiple PartNumbers associated w/same Parent doing same max action_rating.
+  filter(action_rating == max(action_rating)) %>%
+  # sum max action_rating w/in user session per Parent#. Example, Visitor#1000368642442
+  # had a session on 6/22/2017 where for 6 different PartNumbers of the 
+  # same Parent#P65-307800, the visitor clicked "add to order". So instead of a 
+  # rating of just 3 for the Parent#, it should be 18 (3*6) to account for how
+  # much they implicitely like different PartNumbers w/in Parent#P65-307800.
+  summarize(session_action_rating = sum(action_rating)) %>%
+  arrange(VisitorId, Parent, ActionDate) %>%
+  ungroup()
 
-preview2 %>%
-  filter(ActionId == 1 & ActionCount > 1) %>% View()
+summary(update3$session_action_rating)
+# Each row is now a unique Visitor Session with specific Parent# and the session's rating.
+nrow(distinct(update3)) == nrow(update3)
 
+# Step3: per Parent per Visitor, sum the session_action_rating across all sessions (days). 
+# Intuition: If the visitor has had repeat actions with the Parent# over many 
+# different sessions(days), we can interpret they rate this Part Parent Group very highly. 
+update4 <- update3 %>%
+  group_by(VisitorId, Parent) %>%
+  summarize(total_rating = sum(session_action_rating))
+
+
+summary(update4$total_rating)
+
+update4 %>%
+  ggplot(aes(total_rating)) + 
+  geom_histogram(binwidth = 1, colour = "black", fill = "darkgrey") +
+  # median vertical line.
+  geom_vline(aes(xintercept = median(total_rating)),
+             color = "blue", linetype = "dashed", size = 0.5) +
+  geom_text(aes(0,70, label = paste("median = ", median(total_rating))),
+            nudge_x = 7, color = "blue", size = 4.5) +
+  labs(title = 'Total Aggregated Rating of Parent# per Visitor',
+       subtitle = 'Based only on sample of 1000 rows of web activity actions')
+
+# Step4:  right-tailed weighted ratings after these weights are accounted for 
+# across sessions, so transform them in some way (ex. log, sqrt) or coerce them 
+# to some upper limit (ex. cutoff at 10). Some examples below. 
+update5 <- update4 %>%
+  mutate(total_rating_sqrt = sqrt(total_rating),
+         total_rating_logn = log(total_rating),
+         total_ratin_max10 = ifelse(total_rating > 10, 10, total_rating))
+
+summary(update5)
+# Coercing to upper limit of 10 looks promising.
+update5 %>%
+  gather(key = rating_type, value = value, -VisitorId, -Parent) %>%
+  ggplot(aes(value, fill = rating_type)) +
+    geom_histogram(binwidth = max(value) - min(value), colour = "black") +
+    facet_wrap(~ rating_type)
+  
 ################################################################################
