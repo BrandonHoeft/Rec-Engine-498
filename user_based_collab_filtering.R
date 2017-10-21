@@ -73,9 +73,11 @@ user_items <- user_items %>%
                                  if_else(ActionId_label == "select Part detail", 2, 3)))
 
 user_items %>%
-  group_by(ActionId, ActionId_label) %>%
+  group_by(ActionId, ActionId_label, action_rating) %>%
   summarize(frequency = n()) %>%
-  arrange(ActionId)
+  ungroup() %>%
+  mutate(propn = round(frequency / sum(frequency), 2)) %>%
+  arrange(action_rating, desc(frequency))
 
 user_items %>%
   group_by(action_rating) %>%
@@ -200,7 +202,7 @@ user_ratings <- user_ratings %>%
          total_rating_logn = log(total_rating),
          total_rating_max10 = ifelse(total_rating > 10, 10, total_rating))
 
-summary(user_ratings)
+summary(user_ratings[3:6])
 # Coercing to upper limit of 10 looks promising.
 tidy_ratings <- user_ratings %>%
   gather(key = rating_type, value = value, -VisitorId, -Parent)
