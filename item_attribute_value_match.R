@@ -89,12 +89,28 @@ items_long <- items %>%
   # keep columns where the Attr# == Val# to map the original attr:val relationships.
   filter(attribute_position == value_position) %>%
   select(PartNumber, attribute_number, value_number) %>%
-  unite(attr_value, attribute_number, value_number, sep = ":") 
+  unite(attr_value, attribute_number, value_number, sep = ":") %>%
+  mutate(count = 1)
 
 # Errors generate due to size of object.
 items_long %>%
   spread(attr_value, attr_value) %>%
   mutate_at(2:ncol(.), function(x) {ifelse(!is.na(x), 1, x)}) %>%
   as.matrix()
-  
+
+# using sparseMatrix from Matrix package 
+# https://stackoverflow.com/questions/28430674/create-sparse-matrix-from-data-frame?noredirect=1&lq=1
+# the VisitorId and Parent need to be 1 based indices when creating a matrix. 
+# Per ?factor, the levels of a factor are by default sorted.
+m <- sparseMatrix(i = as.integer(as.factor(items_long$PartNumber)),
+                         j = as.integer(as.factor(items_long$attr_value)),
+                         x = items_long$count)
+
+# can rename the matrix row and column labels with unique VisitorId and Parent names. 
+dimnames(m) <- list(sort(unique(items_long$PartNumber)),
+                    sort(unique(items_long$attr_value)))
+
+# check that the order of factor levels and dimnames passed to indices are the same. 
+all.equal(levels(as.factor(items_long$PartNumber)), # line 104
+          sort(unique(items_long$PartNumber))) # line 110
 
