@@ -46,14 +46,11 @@ s3save(user_items, bucket = "pred498team5", object = "user_items.Rdata")
 ################################################################################
 
 
-
 ################################################################################
 # load the user_items.Rdata object from S3. ------------------------------------
 # This is the data wrangled from lines 14-44. Loads the user_items dataframe. 
 s3load("user_items.Rdata", bucket = "pred498team5")
-
 ################################################################################
-
 
 
 ################################################################################
@@ -85,6 +82,7 @@ user_items %>%
   summarize(frequency = n())
 
 ################################################################################
+
 
 ################################################################################
 # Sample pre-processing of ratings data (1000 rows) to see if it works----------
@@ -162,5 +160,59 @@ update5 %>%
   ggplot(aes(value, fill = rating_type)) +
     geom_histogram(binwidth = max(value) - min(value), colour = "black") +
     facet_wrap(~ rating_type)
-  
+
+################################################################################
+
+
+################################################################################
+# Full pre-processing of ratings data ------------------------------------------
+user_ratings <- user_items %>%
+  select(VisitorId, Parent, ActionDate, action_rating) %>%
+  # create group window for each Visitor's individual session(day) with a Parent# 
+  group_by(VisitorId, Parent, ActionDate) %>%
+  # Step1: w/in window, keep row(s) of max action_rating for that specific session.
+  filter(action_rating == max(action_rating)) %>%
+  # Step2: sum up all max action_ratings to account for >1 max actions with diff. 
+  # PartNumbers of that Parent# during session. An additive weight w/in session of a Parent#.
+  summarize(session_action_rating = sum(action_rating)) %>%
+  # change group window to roll up next aggregations to Visitor:Parent, across all sessions. 
+  group_by(VisitorId, Parent) %>%
+  # Step3: per Parent per Visitor, sum the session_action_rating across all sessions (days).
+  summarize(total_rating = sum(session_action_rating)) %>%
+  ungroup() %>%
+  arrange(VisitorId, total_rating)
+
+
+summary(user_ratings$total_rating)
+
+user_ratings %>%
+  ggplot(aes(total_rating)) + 
+  geom_histogram(binwidth = 5, colour = "black", fill = "darkgrey") +
+  # median vertical line.
+  labs(title = 'Parent Family# Total Rating Distribution',
+       subtitle = 'Per each Visitor in full dataset')
+
+# Step4:  right-tailed weighted ratings after these weights are accounted for 
+# across sessions, so transform them in some way (ex. log, sqrt) or coerce them 
+# to some upper limit (ex. cutoff at 10). Some examples below. 
+user_ratings <- user_ratings %>%
+  mutate(total_rating_sqrt = sqrt(total_rating),
+         total_rating_logn = log(total_rating),
+         total_rating_max10 = ifelse(total_rating > 10, 10, total_rating))
+
+summary(user_ratings)
+# Coercing to upper limit of 10 looks promising.
+tidy_ratings <- user_ratings %>%
+  gather(key = rating_type, value = value, -VisitorId, -Parent)
+
+tidy_ratings %>%
+  ggplot(aes(value, fill = rating_type)) +
+  geom_histogram(data = subset(tidy_ratings, rating_type == "total_rating"), binwidth = 20, color = "black") + 
+  geom_histogram(data = subset(tidy_ratings, rating_type != "total_rating"), binwidth = 1, color = "black") + 
+  facet_wrap(~ rating_type, scales = "free") +
+  labs(title = "Parent Family# Total Rating Distribution per Each Visitor",
+       subtitle = "with different scale transformations")
+
+remove(tidy_user_ratings)
+
 ################################################################################
