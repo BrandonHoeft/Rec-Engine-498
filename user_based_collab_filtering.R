@@ -84,11 +84,6 @@ user_items %>%
   summarize(frequency = n())
 
 
-
-
-
-
-
 # Sample pre-processing of ratings data (1000 rows) to see if it works----------
 update <- user_items %>%
   select(VisitorId, Parent, PartNumber, ActionDate, starts_with("Action")) %>%
@@ -235,7 +230,8 @@ sparse_r <- sparseMatrix(i = as.integer(as.factor(user_ratings$VisitorId)),
 dimnames(sparse_r) <- list(sort(unique(user_ratings$VisitorId)),
                            sort(unique(user_ratings$Parent)))
 
-# check that the order of factor levels and dimnames passed to indices are the same. 
+# check that the levels of the factor are identical position matches to dimnames 
+# being passed to the row and column labels of the sparse matrix. 
 all.equal(levels(as.factor(user_ratings$VisitorId)), # line 230
           sort(unique(user_ratings$VisitorId))) # line 235
 all.equal(levels(as.factor(user_ratings$Parent)), # line 231
@@ -248,7 +244,81 @@ str(sparse_r) # it's an S4 object. use slots (@) to access elements.
 
 # Bring sparse ratings matrix into Recommenderlab ------------------------------
 library(recommenderlab)
+methods(class = "realRatingMatrix")
+methods(class = "binaryRatingMatrix")
 
 # coercse sparseMatrix into a realRatingMatrix object
 r <- as(sparse_r, "realRatingMatrix")
+str(r)
+r
 
+# preview the first 100 visitors total count of non-missing implicit ratings.
+rowCounts(r[1:100,])
+
+# preview of the ratings matrix of visitors (rows) and their Parent# ratings (col).
+getRatingMatrix(r[50:100, 1000:1010])
+
+# realRatingsMatrix can be coerced into a list of users with their ratings for 
+# closer inspection or into a data.frame for the 1st user, 1000261260099, 
+# look at all items they implicitely rated. 
+as(r[1,], "list")
+as(r[1,], "data.frame")
+
+
+# extract the non-missing ratings as a vector to summarize the ratings. same as 
+# summary() of the user_ratings vector of total_rating_max10.
+summary(getRatings(r)); all.equal(summary(getRatings(r)), summary(user_ratings$total_rating_max10))
+
+data.frame(ratings = getRatings(r)) %>%
+  ggplot(aes(ratings, y = ..density..)) + geom_histogram(binwidth = 1, color = "black") +
+  labs(title = 'Parent# Total Ratings Distribution')
+
+# Build User-Based Collaborative Filtering Model--------------------------------
+
+# types of collaborative filtering algorithms
+recommenderRegistry$get_entries(dataType = "realRatingMatrix")
+recommenderRegistry$get_entries(dataType = "binaryRatingMatrix")
+
+# UBCF_realRatingMatrix
+recommenderRegistry$get_entries(dataType = "realRatingMatrix")$UBCF_realRatingMatrix # tuning parameters
+
+
+# need to subset the population of visitors to keep records that have enough ratings
+# data for evaluation on test data. For the "Given" parameter of the evaluation
+# scheme, x randomly chosen items per test visitor row are given to the fitted
+# recommender algorithm to learn the model (i.e. nearest neighbor similarity). 
+# remainder of each test visitor's items unseen by the algorithm are used for
+# measuring predictive performance. Therefore, the "given" threshold must be
+# higher than the minimum number of items for any visitor record so there is 
+# enough test data to learn the algorithm and measure predictive performance. 
+min(rowCounts(r)) # must keep n rec. items > min(rowCounts(movie_r))
+summary(rowCounts(r))
+
+r_drop_5under <- r[rowCounts(r) > 5, ]
+min(rowCounts(r_drop_5under))
+summary(rowCounts(r_drop_5under))
+
+# define parameters for model evaluation scheme.
+train_proportion <- .80
+test_user_records_cnt_for_similarity <- 5 ; 
+good_threshold <- 3 # a good rating threshold for a binary classifier?
+
+
+# Create the evaluation scheme for fitting and testing the recommender algorithm.
+set.seed(123)
+model_train_scheme <- r_drop_5under %>%
+  evaluationScheme(method = 'split', # single train/test partition
+                   train = train_proportion, # random sample proportion.
+                   given = test_user_records_cnt_for_similarity, 
+                   goodRating = good_threshold,
+                   k = 1)
+
+# Fit a UBCF recommender system algorithm. 
+# Building a Recommender System with R by Gorakala and Usuelli. Ch.4 pp 84
+model_params <- list(method = "cosine",
+                     nn = 25, # find each user's 10 most similar users.
+                     sample = FALSE, # already did this.
+                     normalize = "center")
+
+model1 <- getData(model_train_scheme, "train") %>% #only fit on the 75% training data.
+  Recommender(method = "UBCF", parameter = model_params)
