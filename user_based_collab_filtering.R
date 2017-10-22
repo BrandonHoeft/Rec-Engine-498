@@ -281,6 +281,7 @@ recommenderRegistry$get_entries(dataType = "binaryRatingMatrix")
 
 # UBCF_realRatingMatrix
 recommenderRegistry$get_entries(dataType = "realRatingMatrix")$UBCF_realRatingMatrix # tuning parameters
+recommenderRegistry$get_entries(dataType = "realRatingMatrix")$UBCF_realRatingMatrix$parameters # tuning parameters
 
 
 # need to subset the population of visitors to keep records that have enough ratings
@@ -294,9 +295,10 @@ recommenderRegistry$get_entries(dataType = "realRatingMatrix")$UBCF_realRatingMa
 min(rowCounts(r)) # must keep n rec. items > min(rowCounts(movie_r))
 summary(rowCounts(r))
 
-r_drop_5under <- r[rowCounts(r) > 5, ]
-min(rowCounts(r_drop_5under))
-summary(rowCounts(r_drop_5under))
+r_over5 <- r[rowCounts(r) > 5, ]
+nrow(r) - nrow(r_over5) # dropped 504 Visitor records.
+min(rowCounts(r_over5))
+summary(rowCounts(r_over5))
 
 # define parameters for model evaluation scheme.
 train_proportion <- .80
@@ -306,7 +308,7 @@ good_threshold <- 3 # a good rating threshold for a binary classifier?
 
 # Create the evaluation scheme for fitting and testing the recommender algorithm.
 set.seed(123)
-model_train_scheme <- r_drop_5under %>%
+model_train_scheme <- r_over5 %>%
   evaluationScheme(method = 'split', # single train/test partition
                    train = train_proportion, # random sample proportion.
                    given = test_user_records_cnt_for_similarity, 
@@ -318,7 +320,43 @@ model_train_scheme <- r_drop_5under %>%
 model_params <- list(method = "cosine",
                      nn = 25, # find each user's 10 most similar users.
                      sample = FALSE, # already did this.
+                     # centered cosine similarity > raw cosine similarity.
+                     # https://youtu.be/h9gpufJFF-0?list=PLPEu1YFt_zElULdcZBwiDOtOiNLXErWos&t=332
                      normalize = "center")
 
-model1 <- getData(model_train_scheme, "train") %>% #only fit on the 75% training data.
+# Model1: centered cosine similarity.
+model1 <- getData(model_train_scheme, "train") %>% 
   Recommender(method = "UBCF", parameter = model_params)
+
+# Model2: raw cosine similarity.
+model2_params <- list(method = "cosine",
+                     nn = 25, 
+                     sample = FALSE, 
+                     normalize = NA)
+
+model2 <- getData(model_train_scheme, "train") %>% 
+  Recommender(method = "UBCF", parameter = model2_params)
+
+# Model3: raw Pearson Correlation similarity.
+model3_params <- list(method = "pearson",
+                      nn = 25, 
+                      sample = FALSE,
+                      normalize = NA)
+
+model3 <- getData(model_train_scheme, "train") %>% 
+  Recommender(method = "UBCF", parameter = model3_params)
+
+# 5.5 - 5.6. Evaluation of predicted ratings in recommenderLab vignette. 
+# can use n = for predicting TopN or type = for predicting ratings.
+# https://cran.r-project.org/web/packages/recommenderlab/vignettes/recommenderlab.pdf
+# takes 15 minutes to run.
+model1_pred <- predict(model1, getData(model_train_scheme, "known"), type = "ratings")
+s3save(model1_pred, bucket = "pred498team5", object = "model1.Rdata")
+model1_pred
+
+model2_pred <- predict(model2, getData(model_train_scheme, "known"), type = "ratings")
+
+model3_pred <- predict(model3, getData(model_train_scheme, "known"), type = "ratings")
+
+# Use library(microbenchmark) to measure runtime of evaluating models on new data.
+# https://www.r-bloggers.com/using-the-microbenchmark-package-to-compare-the-execution-time-of-r-expressions/
