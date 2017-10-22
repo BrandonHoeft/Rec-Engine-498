@@ -212,7 +212,7 @@ tidy_ratings %>%
   labs(title = "Distribution of Visitors' Total Rating of Parent Part Families",
        subtitle = "with different rating transformations")
 
-remove(tidy_user_ratings)
+remove(tidy_ratings)
 
 
 
@@ -248,28 +248,29 @@ methods(class = "realRatingMatrix")
 methods(class = "binaryRatingMatrix")
 
 # coercse sparseMatrix into a realRatingMatrix object
-r <- as(sparse_r, "realRatingMatrix")
-str(r)
-r
+real_r <- as(sparse_r, "realRatingMatrix")
+str(real_r)
+real_r
 
 # preview the first 100 visitors total count of non-missing implicit ratings.
-rowCounts(r[1:100,])
+rowCounts(real_r[1:100,])
 
 # preview of the ratings matrix of visitors (rows) and their Parent# ratings (col).
-getRatingMatrix(r[50:100, 1000:1010])
+getRatingMatrix(real_r[50:100, 1000:1010])
 
 # realRatingsMatrix can be coerced into a list of users with their ratings for 
 # closer inspection or into a data.frame for the 1st user, 1000261260099, 
 # look at all items they implicitely rated. 
-as(r[1,], "list")
-as(r[1,], "data.frame")
+as(real_r[1,], "list")
+as(real_r[1,], "data.frame")
 
 
 # extract the non-missing ratings as a vector to summarize the ratings. same as 
 # summary() of the user_ratings vector of total_rating_max10.
-summary(getRatings(r)); all.equal(summary(getRatings(r)), summary(user_ratings$total_rating_max10))
+summary(getRatings(real_r)); all.equal(summary(getRatings(real_r)), summary(user_ratings$total_rating_max10))
 
-data.frame(ratings = getRatings(r)) %>%
+# same plot as before from the tidy dataframe for total_rating_max10. 
+data.frame(ratings = getRatings(real_r)) %>%
   ggplot(aes(ratings, y = ..density..)) + geom_histogram(binwidth = 1, color = "black") +
   labs(title = 'Parent# Total Ratings Distribution')
 
@@ -292,15 +293,32 @@ recommenderRegistry$get_entries(dataType = "realRatingMatrix")$UBCF_realRatingMa
 # measuring predictive performance. Therefore, the "given" threshold must be
 # higher than the minimum number of items for any visitor record so there is 
 # enough test data to learn the algorithm and measure predictive performance. 
-min(rowCounts(r)) # must keep n rec. items > min(rowCounts(movie_r))
-summary(rowCounts(r))
+min(rowCounts(real_r)) # must keep n rec. items > min(rowCounts(movie_r))
+summary(rowCounts(real_r))
 
-r_over5 <- r[rowCounts(r) > 5, ]
-nrow(r) - nrow(r_over5) # dropped 504 Visitor records.
-min(rowCounts(r_over5))
-summary(rowCounts(r_over5))
+# Distribution of different Parent# interacted by each VisitorId
+rowCounts(real_r) %>%
+  data.frame(parent_interactions_per_person = .) %>%
+  ggplot(aes(x = parent_interactions_per_person, y = ..density..)) + 
+  geom_histogram(binwidth = 10, colour = "black", fill = "darkgrey") +
+  geom_vline(aes(xintercept = median(parent_interactions_per_person)),
+             color = "dodgerblue3", linetype = "dashed", size = 0.5) +
+  geom_text(aes(0,.01, family = "courier", 
+                label = paste("median = ", median(parent_interactions_per_person))), 
+            nudge_x = 150, color = "dodgerblue3", size = 4.5) +
+    labs(title = 'Distribution of Parent Part# Interactions per VisitorId',
+         subtitle = "binwidth set to 10")
+
+
+real_r_over5 <- real_r[rowCounts(real_r) > 5, ]
+real_r_over10 <- real_r[rowCounts(real_r) > 10, ]
+
+nrow(real_r) - nrow(real_r_over5) # dropped 504 Visitor records.
+min(rowCounts(real_r_over5))
+summary(rowCounts(real_r_over5))
 
 # define parameters for model evaluation scheme.
+?evaluationScheme
 train_proportion <- .80
 test_user_records_cnt_for_similarity <- 5 ; 
 good_threshold <- 3 # a good rating threshold for a binary classifier?
