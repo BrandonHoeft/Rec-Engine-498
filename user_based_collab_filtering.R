@@ -264,7 +264,6 @@ getRatingMatrix(real_r[50:100, 1000:1010])
 as(real_r[1,], "list")
 as(real_r[1,], "data.frame")
 
-
 # extract the non-missing ratings as a vector to summarize the ratings. same as 
 # summary() of the user_ratings vector of total_rating_max10.
 summary(getRatings(real_r)); all.equal(summary(getRatings(real_r)), summary(user_ratings$total_rating_max10))
@@ -311,32 +310,52 @@ rowCounts(real_r) %>%
 
 
 real_r_over5 <- real_r[rowCounts(real_r) > 5, ]
-real_r_over10 <- real_r[rowCounts(real_r) > 10, ]
+# real_r_over10 <- real_r[rowCounts(real_r) > 10, ]
 
 nrow(real_r) - nrow(real_r_over5) # dropped 504 Visitor records.
 min(rowCounts(real_r_over5))
 summary(rowCounts(real_r_over5))
 
+# Filter out Columns that are too sparse, almost no raters in them. 
+min(colCounts(real_r)) 
+summary(colCounts(real_r))
+
+# Distribution of different Parent# interacted by each VisitorId. 
+# THIS IS THE LONG-TAIL PHENOMENON.
+# Should consider dropping items with too few ratings. . . . . 
+colCounts(real_r) %>%
+  data.frame(parent_interactions_per_person = .) %>%
+  ggplot(aes(x = parent_interactions_per_person, y = ..density..)) + 
+  geom_histogram(binwidth = 10, colour = "black", fill = "darkgrey") +
+  geom_vline(aes(xintercept = median(parent_interactions_per_person)),
+             color = "dodgerblue3", linetype = "dashed", size = 0.5) +
+  geom_text(aes(0,.01, family = "courier", 
+                label = paste("median = ", median(parent_interactions_per_person))), 
+            nudge_x = 150, color = "dodgerblue3", size = 4.5) +
+  labs(title = 'Distribution of Count of VisitorId interactions per Parent Part#',
+       subtitle = "binwidth set to 10")
+
+
 # define parameters for model evaluation scheme.
 ?evaluationScheme
 train_proportion <- .80
-test_user_records_cnt_for_similarity <- 5 ; 
-good_threshold <- 3 # a good rating threshold for a binary classifier?
+use_n_test_records_per_user <- 5 # use 5 records per test user to learn model.
+good_rating <- 3 # a good rating threshold for a binary classifier?
 
 
 # Create the evaluation scheme for fitting and testing the recommender algorithm.
 set.seed(123)
-model_train_scheme <- r_over5 %>%
+model_train_scheme <- real_r_over5 %>%
   evaluationScheme(method = 'split', # single train/test partition
                    train = train_proportion, # random sample proportion.
-                   given = test_user_records_cnt_for_similarity, 
-                   goodRating = good_threshold,
+                   given = use_n_test_records_per_user, 
+                   goodRating = good_rating,
                    k = 1)
 
 # Fit a UBCF recommender system algorithm. 
 # Building a Recommender System with R by Gorakala and Usuelli. Ch.4 pp 84
 model_params <- list(method = "cosine",
-                     nn = 25, # find each user's 10 most similar users.
+                     nn = 25, # find each user's 25 most similar users.
                      sample = FALSE, # already did this.
                      # centered cosine similarity > raw cosine similarity.
                      # https://youtu.be/h9gpufJFF-0?list=PLPEu1YFt_zElULdcZBwiDOtOiNLXErWos&t=332
@@ -364,17 +383,55 @@ model3_params <- list(method = "pearson",
 model3 <- getData(model_train_scheme, "train") %>% 
   Recommender(method = "UBCF", parameter = model3_params)
 
+# Model3: raw Pearson Correlation similarity.
+model4_params <- list(method = "pearson",
+                      nn = 25, 
+                      sample = FALSE,
+                      normalize = "center")
+
+model4 <- getData(model_train_scheme, "train") %>% 
+  Recommender(method = "UBCF", parameter = model4_params)
+
 # 5.5 - 5.6. Evaluation of predicted ratings in recommenderLab vignette. 
 # can use n = for predicting TopN or type = for predicting ratings.
 # https://cran.r-project.org/web/packages/recommenderlab/vignettes/recommenderlab.pdf
-# takes 15 minutes to run.
+# takes 14 minutes to run. 
+#Take < 2 min on m4.large.
+
 model1_pred <- predict(model1, getData(model_train_scheme, "known"), type = "ratings")
-s3save(model1_pred, bucket = "pred498team5", object = "model1.Rdata")
+s3save(model1_pred, bucket = "pred498team5", object = "model1_pred.Rdata")
+#s3load(model1_pred, bucket = "pred498team5", object = "model1_pred.Rdata")
 model1_pred
 
 model2_pred <- predict(model2, getData(model_train_scheme, "known"), type = "ratings")
+#s3save(model2_pred, bucket = "pred498team5", object = "model2_pred.Rdata")
+#s3load(model2_pred, bucket = "pred498team5", object = "model2_pred.Rdata")
+
 
 model3_pred <- predict(model3, getData(model_train_scheme, "known"), type = "ratings")
+#s3save(model3_pred, bucket = "pred498team5", object = "model3_pred.Rdata")
+#s3load(model3_pred, bucket = "pred498team5", object = "model3_pred.Rdata")
+
+model4_pred <- predict(model4, getData(model_train_scheme, "known"), type = "ratings")
+#s3save(model4_pred, bucket = "pred498team5", object = "model4_pred.Rdata")
+#s3load(model4_pred, bucket = "pred498team5", object = "model4_pred.Rdata")
+
+test_error <- rbind(
+  UBCF_centered_cosine = calcPredictionAccuracy(model1_pred, 
+                                                getData(model_train_scheme, "unknown"), 
+                                                byUser = FALSE),
+  UBCF_raw_cosine = calcPredictionAccuracy(model2_pred, 
+                                           getData(model_train_scheme, "unknown"), 
+                                           byUser = FALSE),
+  UBCF_raw_pearson = calcPredictionAccuracy(model3_pred, 
+                                            getData(model_train_scheme, "unknown"), 
+                                            byUser = FALSE),
+  UBCF_centered_pearson = calcPredictionAccuracy(model4_pred, 
+                                            getData(model_train_scheme, "unknown"), 
+                                            byUser = FALSE))
+
+test_error
+
 
 # Use library(microbenchmark) to measure runtime of evaluating models on new data.
 # https://www.r-bloggers.com/using-the-microbenchmark-package-to-compare-the-execution-time-of-r-expressions/
