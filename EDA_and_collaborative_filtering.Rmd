@@ -39,11 +39,16 @@ library(pryr) # mem_used() and object_size() functions to manage/understand memo
 
 To read the Part items data and the user webactivity data from s3 I passed read_table2() functions for reading tabular data into the `aws.s3` functions for reading objects from AWS. 
 
-``` {r echo = TRUE}
-# specify personal account keys as environment variables so I can read my s3 object(s) from AWS.
+``` {r eval = FALSE, include = FALSE}
+# specify personal account keys as environment variables so I can read my s3 object(s) from AWS. 
+
+# DO NOT DO NOT DO NOT DO NOT DO NOT SAVE KEY in code or render in output!!!! Could compromise AWS account. 
 #Sys.setenv("AWS_ACCESS_KEY_ID" = "",
 #           "AWS_SECRET_ACCESS_KEY" = "")
 
+```
+
+``` {r echo = TRUE}
 
 # items: part number, parent, catalogue, attributes/values.
 items <- s3read_using(FUN = read_table2, 
@@ -69,7 +74,13 @@ The only information I'm particularly interested in from the **items** dataset i
 # left join the parent family to the users PartNumber
 user_items <- users %>%
   left_join(items, by = "PartNumber") %>%
-  mutate(ActionDate = ymd(ActionDate)) %>% # parse into a date format.
+  mutate(ActionDate = ymd(ActionDate), # parse into a date format.
+         ActionId_label = factor(user_items$ActionId, # create labels
+                                 labels = c("add to order", "select Part",
+                                            "select Part detail",
+                                            "print detail",
+                                            "save CAD drawing detail",
+                                            "print CAD drawing detail"))) %>% 
   select(-starts_with("Val"), -starts_with("Attr"), -starts_with("Catalog"))
 
 # Check that left join worked and initial columns match identically. 
@@ -83,7 +94,80 @@ remove(items)
 
 With a baseline dataset, I can start exploring some information about the users. I'll refer to them as visitors, since these are web click data about how visitors/customers of a manufacturing supplier are interacting with the company's website and mobile application. 
 
-We'll start by asking some questions of the data. Initial analysis shows that there are 
+We'll start by asking some questions of the data. The web activity covered by these data begins on `r min(user_items$ActionDate)` and goes through `r max(user_items$ActionDate) `, covering a span of `r max(user_items$ActionDate) - min(user_items$ActionDate)` days. 
 
-``` {r echo }
+#### Summary of Unique Visitors, PartNumbers, Parents
 
+Initial analysis shows that there are `r unique(user_items$VisitorId) %>% length()` unique VisitorID numbers in this dataset. 
+
+There are `r unique(user_items$PartNumber) %>% length()` unique PartNumbers associated with the visitor web activity data.
+
+Instead of looking at very specific PartNumbers, we can also roll the analysis up to the Parent level. The Parent level is a grouping of similar PartNumber products to a parent family. Within the website, it's a hyperlink associated with the PartNumber. Parent groups will vary. It is a way that individual merchandising managers at the company decide to categorize and split stuff up. There are `r unique(user_items$Parent) %>% length()` unique Parent family numbers (referred herein as Parents) associated with the visitor web activity data. 
+
+Code for getting the aforementioned details is below. 
+
+``` {r echo = TRUE, eval = FALSE }
+# How many Different Users are in the dataset? 
+unique(user_items$VisitorId) %>% length()
+# How many distinct PartNumber's are in the dataset? 
+unique(user_items$PartNumber) %>% length()
+# How many distinct Parent Family's of PartNumbers are in the dataset? 
+unique(user_items$Parent) %>% length()
+
+```
+
+#### How do total Action Counts of each visitor distribute? 
+
+Action counts are how often a visitor did a particular action within their session. In a single session (the day of the visitor activity interaction with a PartNumber) if they selected a PartNumber in the carousel, this is reflected as a single row in the dataset, with an ActionCount of 1. If they selected the part 2 times in this session, the ActionCount value is equal to 2. 
+
+``` {r echo = TRUE}
+user_items %>%
+  group_by(VisitorId) %>%
+  summarize(activity_count = sum(ActionCount)) %>%
+  with(summary(activity_count))
+
+user_items %>%
+  group_by(VisitorId) %>%
+  summarize(activity_count = sum(ActionCount)) %>%
+  ggplot(aes(activity_count, y = ..density..)) + 
+  geom_histogram(binwidth = 100, colour = "black", fill = "darkgrey") +
+  # median vertical line.
+  geom_vline(aes(xintercept = median(activity_count)),
+             color = "dodgerblue3", linetype = "dashed", size = 0.5) +
+  geom_text(aes(0,.002, family = "courier", label = paste("median = ", median(activity_count))),
+            nudge_x = 700, color = "dodgerblue3", size = 4.5) +
+  labs(title = 'Distribution of Total interactions with PartNumbers',
+       subtitle = 'For each Visitor')
+
+```
+
+After careful consideration, it was determined that total actions per PartNumber or per Parent should not influence the implicit rating derived for the recommender. This could be for a variety of reasons, such as selecting a part multiple times in the same session may perhaps be just as indicative of uncertainty as it could be of endorsing that part. 
+
+#### How many unique PartNumbers are visitors interacting with? 
+
+#### How many unique Parents are visitors interacting with? 
+
+expect this to be less per user typically than the different PartNumbers 
+they may interact with since Parent is a higher level grouping. 
+
+#### How many unique visitors have interacted with each PartNumber? 
+
+#### How many unique visitors have interacted with each Parent Family? 
+
+Because Parent Family's are a broader generalization than PartNumbers, we'd 
+expect to have more interactions within Parent Family than at the lower level
+of PartNumber. 
+
+#### How many PartNumbers fall into each Parent Family?
+
+#### Do Parents with more PartNumbers also have more overall visitor clicks? 
+
+#### What types of click Actions do the visitors take? 
+
+### Creating a Ratings Method
+
+Create the 1-2-3 scale by updating user_items dataset. Don't need to update the ActionId_Label.
+
+#### Total Rating of Parent by Visitor 
+
+#### Example of the Total Rating pre-processing pipeline.

@@ -127,6 +127,9 @@ $(document).ready(function () {
 <ul>
 <li><a href="#introduction">Introduction</a></li>
 <li><a href="#getting-the-data-into-r">Getting the data into R</a></li>
+<li><a href="#wrangling-the-dataset">Wrangling the Dataset</a><ul>
+<li><a href="#initial-eda">Initial EDA</a></li>
+</ul></li>
 </ul>
 </div>
 
@@ -137,7 +140,7 @@ $(document).ready(function () {
 </div>
 <div id="getting-the-data-into-r" class="section level2">
 <h2>Getting the data into R</h2>
-<p>I used the following packages to do most of the initial data pre-processing and exploratory analysis. I’m working on an AWS AMI instance that’s a linux machine with RStudio and git installed, using one of the instances publicly available and pre-configured from <a href="http://www.louisaslett.com/RStudio_AMI/">Louis Aslett’s website</a>. I initially started with the free tier, <em>t2.micro</em> instance, but once I started the modeling phase, I scaled up to <em>m4.large</em>.</p>
+<p>I used the following packages to do most of the initial data pre-processing and exploratory analysis. I’m working on an AWS AMI instance that’s a linux machine with RStudio and git installed, using one of the instances publicly available and pre-configured from <a href="http://www.louisaslett.com/RStudio_AMI/">Louis Aslett’s website</a>. I initially started with the free tier, <em>t2.micro</em> instance, but once I started the modeling phase, I scaled up to <em>m4.large</em>, which is also a general purpose computing instance but with better RAM, CPU, and better optimized memory management. AWS AMI instance costs can be calculated <a href="https://calculator.s3.amazonaws.com/index.html">here</a>.</p>
 <p>The datasets queried by Matt Hayden, I’ve put in my own S3 Bucket on Amazon Web Services (AWS). As such, the <code>aws.s3</code> <a href="https://github.com/cloudyr/aws.s3">package</a> was used to access that bucket and bring the datasets into my environment. Access Keys are needed to make read/write calls to the bucket, but I’ve intentionally left that code out of here.</p>
 <pre class="r"><code>library(aws.s3) 
 library(readr) # faster alternatives to base read. methods. 
@@ -146,7 +149,7 @@ library(dplyr) # data wrangling
 library(tidyr) # data wrangling
 library(ggplot2) # data viz. 
 library(pryr) # mem_used() and object_size() functions to manage/understand memory usage.</code></pre>
-<p>To read the Part items data and the user webactivity data from <strong>s3</strong> I passed read_table2() functions for reading tabular data into the <code>aws.s3</code> functions for reading objects from AWS.</p>
+<p>To read the Part items data and the user webactivity data from s3 I passed read_table2() functions for reading tabular data into the <code>aws.s3</code> functions for reading objects from AWS.</p>
 <pre class="r"><code># items: part number, parent, catalogue, attributes/values.
 items &lt;- s3read_using(FUN = read_table2, 
                       object = &quot;obfuscatedItems_10_17_17.txt&quot;, 
@@ -160,7 +163,36 @@ users &lt;- s3read_using(FUN = read_table2,
                       col_types = &quot;ccici&quot;,
                       object = &quot;obfuscatedWebActivity_10_16_17.txt&quot;, 
                       bucket = &quot;pred498team5&quot;)</code></pre>
+</div>
+<div id="wrangling-the-dataset" class="section level2">
+<h2>Wrangling the Dataset</h2>
 <p>The only information I’m particularly interested in from the <strong>items</strong> dataset is the Parent column, and left joining that to the matching PartNumber in the users data. Building a recommender system using the Parent family instead of the specific PartNumber will be discussed later.</p>
+<pre class="r"><code># left join the parent family to the users PartNumber
+user_items &lt;- users %&gt;%
+  left_join(items, by = &quot;PartNumber&quot;) %&gt;%
+  mutate(ActionDate = ymd(ActionDate)) %&gt;% # parse into a date format.
+  select(-starts_with(&quot;Val&quot;), -starts_with(&quot;Attr&quot;), -starts_with(&quot;Catalog&quot;))
+
+# Check that left join worked and initial columns match identically. 
+all.equal(users[1:3], user_items[1:3])</code></pre>
+<pre><code>[1] TRUE</code></pre>
+<pre class="r"><code>remove(users)
+remove(items)</code></pre>
+<div id="initial-eda" class="section level3">
+<h3>Initial EDA</h3>
+<p>With a baseline dataset, I can start exploring some information about the users. I’ll refer to them as visitors, since these are web click data about how visitors/customers of a manufacturing supplier are interacting with the company’s website and mobile application.</p>
+<p>We’ll start by asking some questions of the data. The web activity covered by these data begins on 2017-03-24 and goes through 2017-07-08, covering a span of 106. Initial analysis shows that there are 5895 unique VisitorID numbers in this dataset.</p>
+<pre class="r"><code># How many Different Users are in the dataset? 
+unique(user_items$VisitorId) %&gt;% length()
+# How many distinct PartNumber's are in the dataset? 
+unique(user_items$PartNumber) %&gt;% length()
+# How many distinct Parent Family's of PartNumbers are in the dataset? 
+unique(user_items$Parent) %&gt;% length()
+
+max(user_items$ActionDate) 
+min(user_items$ActionDate)
+max(user_items$ActionDate) - min(user_items$ActionDate)</code></pre>
+</div>
 </div>
 
 
