@@ -133,8 +133,8 @@ user_items %>%
              color = "dodgerblue3", linetype = "dashed", size = 0.5) +
   geom_text(aes(0,.002, family = "courier", label = paste("median = ", median(activity_count))),
             nudge_x = 700, color = "dodgerblue3", size = 4.5) +
-  labs(title = 'Distribution of Total interactions with PartNumbers',
-       subtitle = 'For each Visitor',
+  labs(title = 'Distribution of Total interactions with PartNumbers by each Visitor',
+       subtitle = 'binwidth of 100 ',
        x = "Total Actions per Visitor")
 ```
 
@@ -177,23 +177,77 @@ user_items %>%
 ```
 
 ![](EDA_and_collaborative_filtering_files/figure-html/unnamed-chunk-7-1.png)<!-- -->
+
+
 #### How many unique Parents are visitors interacting with? 
 
 Instead of looking at the distinct PartNumbers that each visitor interacts with, we can also look at the Parent category that each PartNumber rolls up to. By reducing the diversity of different products from the specific PartNumber to the Parent category they roll up to, we'd expect the count of interactions with unique Parents to decrease. However, this may improve the sparsity problem of a recommender system. 
 
+
+```r
+user_items %>%
+  group_by(VisitorId) %>%
+  distinct(Parent) %>% # only keep distinct parent per visitor.
+  summarize(unique_parent_count = n()) %>% # get count within the group. 
+  with(summary(unique_parent_count))
+```
 
 ```
    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
    1.00   16.50   40.00   59.38   80.00  843.00 
 ```
 
+```r
+user_items %>%
+  group_by(VisitorId) %>%
+  distinct(Parent) %>% # only keep distinct parent per visitor.
+  summarize(unique_parent_count = n()) %>% # get count within the group. 
+  ggplot(aes(unique_parent_count, y = ..density..)) + 
+  geom_histogram(binwidth = 50, colour = "black", fill = "darkgrey") +
+  # median vertical line.
+  geom_vline(aes(xintercept = median(unique_parent_count)),
+             color = "dodgerblue3", linetype = "dashed", size = 0.5) +
+  geom_text(aes(0,.004, family = "courier", label = paste("median = ", median(unique_parent_count))), 
+            nudge_x = 150, color = "dodgerblue3", size = 4.5) +
+  labs(title = 'Distribution of Unique Parent Interactions',
+       subtitle = 'binwidth of 50',
+       x = 'Unique Parent category per Visitor')
+```
+
 ![](EDA_and_collaborative_filtering_files/figure-html/unnamed-chunk-8-1.png)<!-- -->
+
+
 #### How many unique visitors have interacted with each PartNumber? 
 
+
+```r
+user_items %>%
+  group_by(PartNumber) %>%
+  distinct(VisitorId) %>% # only keep distinct visitors per Item.
+  summarize(unique_users_count = n()) %>%
+  with(summary(unique_users_count))
+```
 
 ```
    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
   1.000   1.000   2.000   2.796   3.000 378.000 
+```
+
+```r
+user_items %>%
+  group_by(PartNumber) %>%
+  distinct(VisitorId) %>% # only keep distinct visitors per Item.
+  summarize(unique_users_count = n()) %>%
+  ggplot(aes(unique_users_count, y = ..density..)) + # modal value is around log(2) or 2 items.
+  geom_histogram(binwidth = 5, colour = "black", fill = "darkgrey") +
+  # median vertical line.
+  geom_vline(aes(xintercept = median(unique_users_count)),
+             color = "dodgerblue3", linetype = "dashed", size = 0.5) +
+  geom_text(aes(0,.1, family = "courier", label = paste("median = ", median(unique_users_count))), 
+            nudge_x = 50, color = "dodgerblue3", size = 4.5) +
+  labs(title = 'Distribution of Unique Visitor Interactions for each PartNumber',
+       subtitle = 'binwidth of 5',
+       x = 'Unique Visitors per PartNumber')
 ```
 
 ![](EDA_and_collaborative_filtering_files/figure-html/unnamed-chunk-9-1.png)<!-- -->
@@ -204,29 +258,112 @@ Because Parent Family's are a broader generalization than PartNumbers, we'd
 expect to have more interactions within Parent Family than at the very specific PartNumber level and the summary statistics and distributions reflect that. 
 
 
+```r
+user_items %>%
+  group_by(Parent) %>%
+  distinct(VisitorId) %>% # only keep distinct visitors per Item.
+  summarize(unique_users_count = n()) %>%
+  with(summary(unique_users_count))
+```
+
 ```
    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
    1.00    3.00    6.00   16.01   15.00 1170.00 
 ```
 
+```r
+user_items %>%
+  group_by(Parent) %>%
+  distinct(VisitorId) %>% # only keep distinct visitors per Item.
+  summarize(unique_users_count = n()) %>%
+  ggplot(aes(unique_users_count, y = ..density..)) + 
+  geom_histogram(binwidth = 20, colour = "black", fill = "darkgrey") +
+  # median vertical line.
+  geom_vline(aes(xintercept = median(unique_users_count)),
+             color = "dodgerblue2", linetype = "dashed", size = 0.5) +
+  geom_text(aes(0, .02, family = "courier", label = paste("median = ", median(unique_users_count))),
+            nudge_x = 150, color = "dodgerblue3", size = 4.5) +
+  labs(title = 'Distribution of Unique Visitors for each Parent Family',
+       subtitle = 'binwidth of 20',
+       x = 'Unique Visitors per PartNumber')
+```
+
 ![](EDA_and_collaborative_filtering_files/figure-html/unnamed-chunk-10-1.png)<!-- -->
+
 #### How many PartNumbers fall into each Parent Family?
 
 It's also interesting to know when we reduce the dimensionality of the products by rolling up from PartNumber to their parent categories, how many PartNumbers make up the Parent? 
 
+
+```r
+user_items %>%
+  group_by(Parent) %>%
+  distinct(PartNumber) %>% # remove duplicate part numbers within Parent Group. 
+  summarize(unique_partnumber_count = n()) %>% # return count of unique items per parent. 
+  with(summary(unique_partnumber_count))
+```
 
 ```
    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
   1.000   2.000   4.000   8.788   8.000 582.000 
 ```
 
-#### Do Parents with more PartNumbers also have more overall visitor clicks? 
+#### (TO EXPLORE) Do Parents with more PartNumbers also have more overall visitor clicks? 
 
-IF we roll PartNumbers up to the parent level, there may be a potential concern that the frequency of ratings per a Parent category may be a function of the diversity of PartNumbers that make up the Parent. If this is the case, we'd likely see a correlation pattern between the frequency of PartNumbers per Parent and the number of unique visitors per Parent. In other words, the most popular parents could just be the ones with the most PartNumbers in these data. 
+IF we roll PartNumbers up to the parent level, there may be a potential concern that the frequency of ratings per a Parent category may be a function of the diversity of PartNumbers that make up the Parent. If this is the case, we'd likely see a correlation pattern between the frequency of PartNumbers per Parent and the number of unique visitors per Parent. In other words, the most popular parents could just be the ones with the most PartNumbers in these data.
 
-That could be a potential source of concern or area for further research in these data as collaborative filtering recommendations can be influenced by the most popular items. 
+That could be a potential source of concern or area for further research in these data as collaborative filtering recommendations can be influenced by the most popular items.
 
 #### What types of click Actions do the visitors take? 
+
+Below is the distribution of the 6 different click actions in the visitor click dataset of 1145966 different click actions. 
+
+
+```r
+user_items %>%
+  group_by(ActionId, ActionId_label) %>%
+  summarize(frequency = n()) %>%
+  arrange(desc(frequency))
+```
+
+```
+# A tibble: 6 x 3
+# Groups:   ActionId [6]
+  ActionId           ActionId_label frequency
+     <int>                   <fctr>     <int>
+1        2              select Part    589814
+2        1             add to order    399140
+3        3       select Part detail    132142
+4        5  save CAD drawing detail     19542
+5        4             print detail      3296
+6        6 print CAD drawing detail      2032
+```
+
+```r
+# Bar graph of the 6 different Action ID Labels
+user_items %>%
+  group_by(ActionId, ActionId_label) %>%
+  summarize(frequency = n()) %>%
+  ggplot(aes(x = reorder(ActionId_label, desc(frequency)), y = frequency / sum(frequency))) +
+    geom_bar(aes(fill = ActionId_label), stat = "identity") +
+    labs(title = "Distribution of click Actions taken by Users",
+         subtitle = "on company website or mobile app",
+         x = NULL,
+         y = "Percent") +
+    geom_text(aes(label = frequency, family = "courier", ), 
+              size = 3,
+              stat= "identity", 
+              vjust = -.5) +
+    guides(fill=FALSE) + # remove legend
+    theme(axis.text.x=element_text(angle=25,hjust=1)) + # tilt x labels
+    scale_y_continuous(labels=scales::percent)
+```
+
+![](EDA_and_collaborative_filtering_files/figure-html/unnamed-chunk-12-1.png)<!-- -->
+
+#### (TO EXPLORE) What percent of the time is selecting a part a precursor to adding to cart?
+
+If most of the clicks in the dataset reflect that generally, these ultimately lead to adding items to cart, perhaps this is some evidence that customers tend to know what they want when they land on the website. They aren't just querying the site or app out of general interest. 
 
 ### Creating a Ratings Method
 
@@ -234,4 +371,16 @@ Create the 1-2-3 scale by updating user_items dataset. Don't need to update the 
 
 #### Total Rating of Parent by Visitor 
 
+Show the distribution of the new total rating score.
+
+Compare it to other ratings transformations (i.e. lognormal, square root, coerce upper limit). 
+
 #### Example of the Total Rating pre-processing pipeline.
+
+walk through example records of the pre-processing steps for the Total Rating to illustrate the transformations.
+
+### Setting up a User Ratings Matrix
+
+## User Based Collaborative Filtering
+
+## Item Based Collaborative Filtering
