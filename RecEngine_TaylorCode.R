@@ -2,15 +2,42 @@
 setwd("/Users/Taylor")
 setwd("/Users/Taylor/Google Drive/PRED498_RecEngGrp") 
 
-libs <- c("dprep","bestglm","graphics","forecast","plyr","data.table","Deducer",
-          "dplyr", "desc", "lattice", "pander", "stats", "knitr", "corrplot", "MASS", 
+# ipak function: install and load multiple R packages.
+# check to see if packages are installed. Install them if they are not, then load them into the R session.
+
+library(aws.s3) # https://github.com/cloudyr/aws.s3
+library(readr)
+library(dplyr)
+library(tidyr)
+library(Matrix)
+
+
+# specify keys as environment variables so I can read my s3 object(s) from AWS.
+# Your unique access key/secret needs to be passed before running the queries below. 
+Sys.setenv("AWS_ACCESS_KEY_ID" = "AKIAIEDTLZQEO3XY3RQQ",
+           "AWS_SECRET_ACCESS_KEY" = "ybxfOsHYxx5Cef8mmlRdXOReinfJJg8FqvEb3O1j")
+
+install <- function(packages){
+  new.packages <- packages[!(packages %in% installed.packages()[, "Package"])]
+  if (length(new.packages)) 
+    install.packages(new.packages, dependencies = TRUE)
+  sapply(packages, require, character.only = TRUE)
+}
+
+libs <- c("bestglm","graphics","forecast","plyr","data.table","Deducer",
+          "dplyr", "desc", "lattice", "pander", "stats", "knitr", "corrplot",  
           "ggplot2", "rattle", "caret","rpart","Hmisc","rpart.plot", "sm", "psych", 
           "ModelMetrics", "stats", "randomForest", "gbm", "lubridate", "readr", "reshape2", "reshape")
-lapply(libs, require, character.only = TRUE)
+install(libs)
+#lapply(libs, require, character.only = TRUE)
 
 # items data: part number, parent, catalogue, attributes/values.
-items <- read.table("/Users/Taylor/Google Drive/PRED498_RecEngGrp/data/obfuscated 2/obfuscatedItems.txt",
-                           header = TRUE, sep = "", fill = TRUE)
+items <- s3read_using(FUN = read_table2, 
+                      object = "obfuscatedItems.txt", 
+                      col_names = TRUE,
+                      col_types = "cciciiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
+                      bucket = "pred498engine")
+
 
 # there appear to be some duplicate PartNumbers (ex. M10027855) b/c appear on 2+ catalog pages.
 # To remove duplicates, within each PartNumber/Parent combination, sort so that 
@@ -41,6 +68,55 @@ all.equal(web_activity[1:3], user_items[1:3]) # web_activity matches the first 3
 
 user <- read.table("/Users/Taylor/Google Drive/PRED498_RecEngGrp/data//obfuscated 2/obfuscateUserData.txt", header=TRUE, 
                    sep="")
+
+# How many unique partnumbers are there per parent? ---------------------------
+
+PartNumbercounts <- items %>%
+  group_by(Parent) %>%
+  distinct(PartNumber) %>% #only keep distinct zipcode per customer
+  summarise(unique_PartNumber_count = n()) %>% # return count of unique zipcodes per user 
+  as.data.frame
+
+summary(PartNumbercounts$unique_PartNumber_count)
+histogram(PartNumbercounts$unique_PartNumber_count) #majorly skewed right
+
+#create matrix of partnumber, attr_value, and count= 1 ---------------------------------------------------
+# tried this with the first 5 Attribute/value columns to start
+items_long <- items %>%
+  select(PartNumber, Attr1:Val8) %>%
+  # tidy the different attributes columns into a single column.
+  gather(attribute_position, attribute_number, starts_with("Attr"), -PartNumber, 
+         na.rm = TRUE) %>%
+  # tidy the different values columns into a single column. 
+  gather(value_position, value_number, starts_with("Val"), - PartNumber,
+         na.rm = TRUE) %>%
+  # strip 'Attr' and 'Val' from the position columns that identified the original column position.
+  mutate(attribute_position =  gsub("[^0-9]", "", attribute_position),
+         value_position = gsub("[^0-9]", "", value_position)) %>%
+  # keep columns where the Attr# == Val# to map the original attr:val relationships.
+  filter(attribute_position == value_position) %>%
+  select(PartNumber, attribute_number, value_number) %>%
+  unite(attr_value, attribute_number, value_number, sep = ":") %>%
+  mutate(count = 1)
+
+
+# using sparseMatrix from Matrix package 
+# https://stackoverflow.com/questions/28430674/create-sparse-matrix-from-data-frame?noredirect=1&lq=1
+# the VisitorId and Parent need to be 1 based indices when creating a matrix. 
+# Per ?factor, the levels of a factor are by default sorted.
+m <- sparseMatrix(i = as.integer(as.factor(items_long$PartNumber)),
+                  j = as.integer(as.factor(items_long$attr_value)),
+                  x = items_long$count)
+mm <- as.matrix(m)
+attr_valMartix <- as.data.frame(m)
+# How many attributes are associated with each PartNumber? ---------------------------
+
+attr_valueNumbercounts <- items_long %>%
+  group_by(PartNumber) %>%
+  distinct(attr_value) %>% #only keep distinct zipcode per customer
+  summarise(unique_attr_value_count = n()) %>% # return count of unique zipcodes per user 
+  as.data.frame
+
 
 # How many zipcodes does each person have items shipped to? ---------------------------
 
