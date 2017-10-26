@@ -1,23 +1,26 @@
 -   [Introduction](#introduction)
 -   [Getting the data into R](#getting-the-data-into-r)
--   [Wrangling the Data](#wrangling-the-data)
-    -   [Descriptions of the User & Items Data](#descriptions-of-the-user-items-data)
-        -   [Weekly Users and Total Clicks](#weekly-users-and-total-clicks)
-        -   [Description of Unique Visitors, PartNumbers, Parents](#description-of-unique-visitors-partnumbers-parents)
-        -   [How do total Action Counts of each visitor distribute?](#how-do-total-action-counts-of-each-visitor-distribute)
-        -   [How many unique PartNumbers is each visitor interacting with?](#how-many-unique-partnumbers-is-each-visitor-interacting-with)
-        -   [How many unique Parents are visitors interacting with?](#how-many-unique-parents-are-visitors-interacting-with)
-        -   [How many unique visitors have interacted with each PartNumber?](#how-many-unique-visitors-have-interacted-with-each-partnumber)
-        -   [How many unique visitors have interacted with each Parent Family?](#how-many-unique-visitors-have-interacted-with-each-parent-family)
-        -   [How many PartNumbers fall into each Parent Family?](#how-many-partnumbers-fall-into-each-parent-family)
-        -   [(TO EXPLORE) Do Parents with more PartNumbers also have more overall visitor clicks?](#to-explore-do-parents-with-more-partnumbers-also-have-more-overall-visitor-clicks)
-        -   [What types of click Actions do the visitors take?](#what-types-of-click-actions-do-the-visitors-take)
-        -   [(TO EXPLORE) What percent of the time is selecting a part a precursor to adding to cart?](#to-explore-what-percent-of-the-time-is-selecting-a-part-a-precursor-to-adding-to-cart)
-    -   [Collaborative Filtering Algorithms](#collaborative-filtering-algorithms)
-    -   [Creating a Ratings Method](#creating-a-ratings-method)
-        -   [Total Rating of Parent by Visitor](#total-rating-of-parent-by-visitor)
+-   [Initial Data Wrangling](#initial-data-wrangling)
+-   [Descriptions of the User & Items Data](#descriptions-of-the-user-items-data)
+    -   [Weekly Users and Total Clicks](#weekly-users-and-total-clicks)
+    -   [Description of Unique Visitors, PartNumbers, Parents](#description-of-unique-visitors-partnumbers-parents)
+    -   [How do total Action Counts of each visitor distribute?](#how-do-total-action-counts-of-each-visitor-distribute)
+    -   [How many unique PartNumbers is each visitor interacting with?](#how-many-unique-partnumbers-is-each-visitor-interacting-with)
+    -   [How many unique Parents are visitors interacting with?](#how-many-unique-parents-are-visitors-interacting-with)
+    -   [How many unique visitors have interacted with each PartNumber?](#how-many-unique-visitors-have-interacted-with-each-partnumber)
+    -   [How many unique visitors have interacted with each Parent Family?](#how-many-unique-visitors-have-interacted-with-each-parent-family)
+        -   [Impact of Long Tail Distributions](#impact-of-long-tail-distributions)
+    -   [How many PartNumbers fall into each Parent Family?](#how-many-partnumbers-fall-into-each-parent-family)
+    -   [(TO EXPLORE) Do Parents with more PartNumbers also have more overall visitor clicks?](#to-explore-do-parents-with-more-partnumbers-also-have-more-overall-visitor-clicks)
+    -   [What types of click Actions do the visitors take?](#what-types-of-click-actions-do-the-visitors-take)
+    -   [(TO EXPLORE) What percent of the time is selecting a part a precursor to adding to cart?](#to-explore-what-percent-of-the-time-is-selecting-a-part-a-precursor-to-adding-to-cart)
+-   [More Data Wrangling: Creating Ratings](#more-data-wrangling-creating-ratings)
+    -   [Convert Actions to Implicit Ratings](#convert-actions-to-implicit-ratings)
+    -   [Creating a weighted Total Rating per item](#creating-a-weighted-total-rating-per-item)
         -   [Example of the Total Rating pre-processing pipeline.](#example-of-the-total-rating-pre-processing-pipeline.)
+    -   [Total Rating of Parent by Visitor](#total-rating-of-parent-by-visitor)
     -   [Setting up a User Ratings Matrix](#setting-up-a-user-ratings-matrix)
+-   [Collaborative Filtering Algorithms](#collaborative-filtering-algorithms)
 -   [User Based Collaborative Filtering](#user-based-collaborative-filtering)
 -   [Item Based Collaborative Filtering](#item-based-collaborative-filtering)
 
@@ -93,8 +96,8 @@ These 3 datasets of user click activity covering different time periods between 
 users <- bind_rows(users_febmar17, users_aprmayjun17, users_julaug17)
 ```
 
-Wrangling the Data
-------------------
+Initial Data Wrangling
+----------------------
 
 The **items** dataset contains [obfuscated](https://en.wikipedia.org/wiki/Obfuscation_(software)) information about all of the PartNumbers in the company's inventory, as well as information on the catalog that the PartNumber may have been listed in, and the first 20 attributes and attribute values describing the specifications of each PartNumber. It is a very large dataset with 583768 rows, representing the unique PartNumbers.
 
@@ -128,27 +131,27 @@ Our original datasets are taking up a lot of memory. Specifically, all other dat
 remove(users, items, users_febmar17, users_aprmayjun17, users_julaug17)
 ```
 
-### Descriptions of the User & Items Data
+Descriptions of the User & Items Data
+-------------------------------------
 
 The user click data (**may refer to users interchangeably as visitors**) came from three separate graph database queries that were required in order to get around maximum data request requirements. Together, the 3 user datasets represent click data from a **random sample** of accounts that purchase from the company's website who had made purchases recently. These visitor's individual click activities were queried over a time period from 2017-01-31 through 2017-09-08, covering a range of 220 days. Therefore, these data may provide insight into how users/visitors of a manufacturing supplier are interacting with the company's website, which can form the basis of learning from and providing recommendations on items tailored to each user's behavior and interests to improve the user experience and find items faster. Each variable in the main dataset is defined as follows:
 
--   *VisitorId*: This represents the unique account associated with the customer. It is not based on IP address or other geo-tagging information. The queries set up to curate this dataset were intentionally focused on identifying actual customers with account logins who have purchased from the company in the past. There are 23997 unique VisitorIDs in this random sample of user data.
+-   **VisitorId**: This represents the unique account associated with the customer. It is not based on IP address or other geo-tagging information. The queries set up to curate this dataset were intentionally focused on identifying actual customers with account logins who have purchased from the company in the past. There are 23997 unique VisitorIDs in this random sample of user data.
 
--   *PartNumber*: This represents the ID of the specific product Part Number (ex. a pair of gloves, welding mask, pipe, cable, screw) that the VisitorId interacted with in some way(s) during their web session.
+-   **PartNumber**: This represents the ID of the specific product Part Number (ex. a pair of gloves, welding mask, pipe, cable, screw) that the VisitorId interacted with in some way(s) during their web session.
 
--   *Parent*: The Parent level is the hierarchical category of similar products that every specific PartNumbers roll up to. Within the copmany website, it's a hyperlink associated with the PartNumber. Parent groups will vary in size. It is a way that individual merchandising managers at the company decide to categorize and organize the hundreds of thousands of PartNumbers.
+-   **Parent**: The Parent level is the hierarchical category of similar products that every specific PartNumbers roll up to. Within the copmany website, it's a hyperlink associated with the PartNumber. Parent groups will vary in size. It is a way that individual merchandising managers at the company decide to categorize and organize the hundreds of thousands of PartNumbers.
 
--   *ActionId*: represents the type of click action that occurred. There are 6 unique actions that a user can take, which are defined by the next variable for each value of ActionId.
+-   **ActionId**: represents the type of click action that occurred. There are 6 unique actions that a user can take, which are defined by the next variable for each value of ActionId.
 
 -   *ActionId\_label*: The 6 unique actions for each ActionId value are
--   **1 = add to order**: the user added the PartNumber to their order.
--   **2 = select Part**: the user clicked on the PartNumber to get more information. This is the most basic user action.
--   **3 = select Part detail**: the user selected to drill in for more detail about the PartNumber interacting with.
--   **4 = print detail**: the user selected to print the detail about the PartNumber that they drilled into.
--   **5 = save CAD drawing detail**: the user saved the computer aided draft (CAD) drawing about the PartNumber.
--   **6 = print CAD drawing detail**: the user printed the computer aided draft (CAD) drawing about the PartNumber.
-
--   *ActionDate*: This is the date of the user's session with a specific PartNumber(s). A user may have had multiple sessions with different PartNumbers in the same day.
+    -   *1 = add to order*: the user added the PartNumber to their order.
+    -   *2 = select Part*: the user clicked on the PartNumber to get more information. This is the most basic user action.
+    -   *3 = select Part detail*: the user selected to drill in for more detail about the PartNumber interacting with.
+    -   *4 = print detail*: the user selected to print the detail about the PartNumber that they drilled into.
+    -   *5 = save CAD drawing detail*: the user saved the computer aided draft (CAD) drawing about the PartNumber.
+    -   *6 = print CAD drawing detail*: the user printed the computer aided draft (CAD) drawing about the PartNumber.
+-   **ActionDate**: This is the date of the user's session with a specific PartNumber(s). A user may have had multiple sessions with different PartNumbers in the same day.
 
 -   **ActionCount**: For each ActionId that a user took while interacting with a PartNumber within a session, a count of 1 is recorded. So if visitor X interacted with PartNumber Y today by going back and forth and selecting the same PartNumber three times within this day's session, visitor X's ActionCount for PartNumber Y for today will be 3.
 
@@ -156,7 +159,7 @@ With a baseline dataset and description of the different variables provided abov
 
 Again, the web activity covered by these user clicks on the website begins on 2017-01-31 and goes through 2017-09-08, covering a span of 220 days.
 
-#### Weekly Users and Total Clicks
+### Weekly Users and Total Clicks
 
 ``` r
 weekly_activity <- user_items %>%
@@ -221,7 +224,7 @@ weekly_activity %>%
 |:---------------:|:------:|:--------:|:---------------:|:--------------:|
 |     204798.2    | 287278 | 279252.3 |     361214.5    |     123685     |
 
-#### Description of Unique Visitors, PartNumbers, Parents
+### Description of Unique Visitors, PartNumbers, Parents
 
 This was described before when defining the variables in the data, but I'll reiterate it here too. Initial analysis shows that there are 23997 unique VisitorID numbers in the entire dataset of randomly sampled user activity from 2017-01-31 through 2017-09-08.
 
@@ -240,19 +243,9 @@ unique(user_items$PartNumber) %>% length()
 unique(user_items$Parent) %>% length()
 ```
 
-#### How do total Action Counts of each visitor distribute?
+### How do total Action Counts of each visitor distribute?
 
 Action counts, as previously defined represent how often a visitor did a particular action within their session. In a single session (the day of the visitor activity interaction with a PartNumber) if they selected a PartNumber in the carousel, this is reflected as a single row in the dataset, with an ActionCount of 1. If they selected the part 2 times in this session, the ActionCount value is equal to 2.
-
-``` r
-user_items %>%
-  group_by(VisitorId) %>%
-  summarize(activity_count = sum(ActionCount)) %>%
-  with(summary(activity_count))
-```
-
-       Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-        1.0    99.0   263.0   426.7   559.0 10176.0 
 
 ``` r
 user_items %>%
@@ -272,20 +265,12 @@ user_items %>%
 
 ![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-13-1.png)
 
+       Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+        1.0    99.0   263.0   426.7   559.0 10176.0 
+
 After careful consideration, we have determined that total actions per PartNumber or per Parent within a single user session should not influence the implicit rating derived for the recommender. This could be for a variety of reasons, but primarily because there's not a strong theoretical basis that repeating an action in a single session with an item is an endorsement of that item. For example, selecting a part multiple times in the same session may perhaps be just as indicative of uncertainty or confusion as it could be of an interest in the item.
 
-#### How many unique PartNumbers is each visitor interacting with?
-
-``` r
-user_items %>%
-  group_by(VisitorId) %>%
-  distinct(PartNumber) %>% # only keep distinct part numbers per visitor.
-  summarize(unique_part_count = n()) %>% # get count within the group. 
-  with(summary(unique_part_count))
-```
-
-       Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-        1.0    43.0   109.0   169.7   226.0  3847.0 
+### How many unique PartNumbers is each visitor interacting with?
 
 ``` r
 user_items %>%
@@ -304,22 +289,14 @@ user_items %>%
        x = 'Unique PartNumbers per Visitor')
 ```
 
-![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-14-1.png)
-
-#### How many unique Parents are visitors interacting with?
-
-Instead of looking at the distinct PartNumbers that each visitor interacts with, we can also look at the Parent category that each PartNumber rolls up to. By reducing the diversity of different products from the specific PartNumber to the Parent category they roll up to, we'd expect the count of interactions with unique Parents to decrease. However, this may improve the sparsity problem of a recommender system.
-
-``` r
-user_items %>%
-  group_by(VisitorId) %>%
-  distinct(Parent) %>% # only keep distinct parent per visitor.
-  summarize(unique_parent_count = n()) %>% # get count within the group. 
-  with(summary(unique_parent_count))
-```
+![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-15-1.png)
 
        Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-        1.0    30.0    74.0   105.9   146.0  1798.0 
+        1.0    43.0   109.0   169.7   226.0  3847.0 
+
+### How many unique Parents are visitors interacting with?
+
+Instead of looking at the distinct PartNumbers that each visitor interacts with, we can also look at the Parent category that each PartNumber rolls up to. By reducing the diversity of different products from the specific PartNumber to the Parent category they roll up to, we'd expect the count of interactions with unique Parents to decrease. However, this may improve the sparsity problem of a recommender system.
 
 ``` r
 user_items %>%
@@ -338,24 +315,14 @@ user_items %>%
        x = 'Unique Parent category per Visitor')
 ```
 
-![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-15-1.png)
-
-#### How many unique visitors have interacted with each PartNumber?
-
-The following summary stats distribution is potentially problematic. We have a very high dimensional dataset (more PartNumbers than users). So while each user appears to be interacting with quite a few PartNumbers as indicated by previous graphs, this graph shows that for any given PartNumber, there are typically only a handful of different visitors who have explored the exact same PartNumber.
-
-``` r
-temp1 <- user_items %>%
-  group_by(PartNumber) %>%
-  distinct(VisitorId) %>% # only keep distinct visitors per Item.
-  summarize(unique_users_count = n()) %>%
-  with(summary(unique_users_count))
-
-temp1
-```
+![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-17-1.png)
 
        Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-       1.00    2.00    5.00   11.06   11.00 1893.00 
+        1.0    30.0    74.0   105.9   146.0  1798.0 
+
+### How many unique visitors have interacted with each PartNumber?
+
+The following summary stats distribution is potentially problematic. We have a very high dimensional dataset (more PartNumbers than users). So while each user appears to be interacting with quite a few PartNumbers as indicated by previous graphs, this graph shows that for any given PartNumber, there are typically only a handful of different visitors who have explored the exact same PartNumber.
 
 ``` r
 user_items %>%
@@ -375,26 +342,16 @@ user_items %>%
        x = 'Unique Visitors per PartNumber (upper limit coerced to 500)')
 ```
 
-![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-16-1.png)
+![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-19-1.png)
+
+       Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+       1.00    2.00    5.00   11.06   11.00 1893.00 
 
 Typically, on median, there are 5 unique visitors who've visited the same specific PartNumber, for the 368374 PartNumber categories.
 
-#### How many unique visitors have interacted with each Parent Family?
+### How many unique visitors have interacted with each Parent Family?
 
 Because Parent Family's are a broader generalization than PartNumbers, we expect to have more interactions within a single Parent Family by multiple users than at the very specific PartNumber level. The summary statistics and distributions provided below reflect that when the dimensionality of the items is rolled up from the granular PartNumber level to the more general Parent category, we get more users who have looked at the same item.
-
-``` r
-temp2 <- user_items %>%
-  group_by(Parent) %>%
-  distinct(VisitorId) %>% # only keep distinct visitors per Item.
-  summarize(unique_users_count = n()) %>%
-  with(summary(unique_users_count))
-
-temp2
-```
-
-       Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-       1.00   18.00   41.00  105.62   99.75 7063.00 
 
 ``` r
 user_items %>%
@@ -414,15 +371,26 @@ user_items %>%
        x = 'Unique Visitors per PartNumber (upper limit coerced to 2000)')
 ```
 
-![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-17-1.png)
+![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-21-1.png)
+
+       Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+       1.00   18.00   41.00  105.62   99.75 7063.00 
 
 Typically, on median, there are 41 unique visitors who've visited the same Parent category, of the 24058 Parent categories.
 
 This is 8.2 times more unique visitors per item when looking at items from the Parent category perspective than at the most granular PartNumber perspective. Perhaps it may make more sense to model recommendations at the Parent level instead of at the PartNumber level, given these differences in how many unique users are looking at identical PartNumbers versus identical Parent categories.
 
-However, we see a bit of a presence of fat tail. The max number of unique visitors per Parent category is 7063, which means that for at least 1 outlier parent category, 29% of unique users have interacted with the same product. This could be a potential source of concern or area for further research in these data as collaborative filtering recommendations can be influenced by the most popular items when making new recommendations to users.
+However, we see a bit of a presence of fat tail. The max number of unique visitors per Parent category is 7063, which means that for at least 1 outlier parent category, 29% of unique users have interacted with the same product. This is very important in the collaborative filtering setting.
 
-#### How many PartNumbers fall into each Parent Family?
+#### Impact of Long Tail Distributions
+
+The previous 2 distributions of the frequency of number of users who rate PartNumbers and Parent categories, respectively both display a unique property common to recommender system problems. They have a very fat right-tail distribution. This means that most items available are rated infrequently by users and there are only a few commonly rated items, or "popular items".
+
+According to [Aggarwal (2016)](https://www.amazon.com/Recommender-Systems-Textbook-Charu-Aggarwal/dp/3319296574), "The long tail distribution implies that the items, which are frequently rated by users are fewer in number. This fact has important implications for neighborhood-based collaborative filtering algorithms because neighborhoods are often defined on the basis of these frequently rated items. In many cases, the ratings of these high-frequency items are not representative of the low-frequency items because of inherent differences in the rating patterns of the two classes of items" (section 2.2).
+
+Additionally, Aggarwal mentions that because some items are very popular across different users, "such ratings can sometimes worsen the quality of the recommendations becaues they tend to be less discriminative across different users. The negative impact of these recommendations can be experienced both during the peer group computation and also during the prediction computation" (section 2.3.1.4).
+
+### How many PartNumbers fall into each Parent Family?
 
 It's also interesting to know when we reduce the dimensionality of the products by rolling up from PartNumber to their parent categories, how many PartNumbers make up the Parent?
 
@@ -437,7 +405,7 @@ user_items %>%
        Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
        1.00    2.00    6.00   15.31   14.00  786.00 
 
-#### (TO EXPLORE) Do Parents with more PartNumbers also have more overall visitor clicks?
+### (TO EXPLORE) Do Parents with more PartNumbers also have more overall visitor clicks?
 
 IF we roll PartNumbers up to the parent level, there may be a potential concern that the frequency of ratings per a Parent category may be a function of the diversity of PartNumbers that make up the Parent. If this is the case, we'd likely see a correlation pattern between the frequency of PartNumbers per Parent and the number of unique visitors per Parent. In other words, the most popular parents could just be the ones with the most PartNumbers in these data.
 
@@ -454,27 +422,9 @@ user_items %>%
        Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
        1.00   18.00   41.00  105.62   99.75 7063.00 
 
-#### What types of click Actions do the visitors take?
+### What types of click Actions do the visitors take?
 
 Below is the distribution of the 6 different click actions in the visitor click dataset of 8936075 different click actions.
-
-``` r
-user_items %>%
-  group_by(ActionId, ActionId_label) %>%
-  summarize(frequency = n()) %>%
-  arrange(desc(frequency))
-```
-
-    # A tibble: 6 x 3
-    # Groups:   ActionId [6]
-      ActionId           ActionId_label frequency
-         <int>                   <fctr>     <int>
-    1        2              select Part   4429217
-    2        1             add to order   3242184
-    3        3       select Part detail   1068781
-    4        5  save CAD drawing detail    149957
-    5        4             print detail     29177
-    6        6 print CAD drawing detail     16759
 
 ``` r
 # Bar graph of the 6 different Action ID Labels
@@ -484,7 +434,7 @@ user_items %>%
   ggplot(aes(x = reorder(ActionId_label, desc(frequency)), y = frequency / sum(frequency))) +
     geom_bar(aes(fill = ActionId_label), stat = "identity") +
     labs(title = "Distribution of click Actions taken by Users",
-         subtitle = "on company website or mobile app",
+         subtitle = "on company website",
          x = NULL,
          y = "Percent") +
     geom_text(aes(label = frequency, family = "courier", ), 
@@ -496,35 +446,182 @@ user_items %>%
     scale_y_continuous(labels=scales::percent)
 ```
 
-![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-20-1.png)
+![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-25-1.png)
 
-#### (TO EXPLORE) What percent of the time is selecting a part a precursor to adding to cart?
+|  ActionId| ActionId\_label          |  frequency|  proportion|
+|---------:|:-------------------------|----------:|-----------:|
+|         2| select Part              |    4429217|        0.50|
+|         1| add to order             |    3242184|        0.36|
+|         3| select Part detail       |    1068781|        0.12|
+|         5| save CAD drawing detail  |     149957|        0.02|
+|         4| print detail             |      29177|        0.00|
+|         6| print CAD drawing detail |      16759|        0.00|
+
+### (TO EXPLORE) What percent of the time is selecting a part a precursor to adding to cart?
 
 If most of the clicks in the dataset reflect that generally, these ultimately lead to adding items to cart, perhaps this is some evidence that customers tend to know what they want when they land on the website. They aren't just querying the site or app out of general interest.
 
-### Collaborative Filtering Algorithms
+More Data Wrangling: Creating Ratings
+-------------------------------------
 
-For collaborative filtering recommender systems, the recommendations are largely based on the ability to identify commonality either between
+Having explored information about the users and the items they've interacted with in the dataset, we need to devise a ratings system derived from user click actions. These user click actions are not explicit ratings but *inferred ratings* because the user is not telling us directly that they like this item. But, the actions themselves have a hierarchy that can be interpreted as different levels of interest, which may enable us to create "implicit ratings". In our company's case, a higher rating would correspond to which actions we would interpret to be closest to a purchase decision or showing a high level of interest.
 
--   1.  users who've rated similar items in a similar way which addresses a recommendation hypothesis of "who are my nearest neighbors and what do they like?". This is known as **user-based collaborative filtering**. It finds users who have similar interest in items as you and recommends new items based on what they may rate highly.
+This is generally a very popular way of devising ratings for ecommerce because most online interactions by web users aren't explicit ratings by users of a page or product, but simply interactions with that page or product.
 
--   1.  We can also make recommendations by finding items that are similarly rated to the ones that a user has rated. This is known as **item-based collaborative filtering**. It addresses a recommendation hypothesis of "people who liked this also tend to like this."
+### Convert Actions to Implicit Ratings
 
-### Creating a Ratings Method
+After consultation with Matt, the subject matter expert at the company, we decided to convert the values from the **ActionId** column into 3 distinct ratings. Specifically, the 6 different actions a user could take when interacting with distributed into a 1,2,3 ratings system from lowest to highest inferred rating.
 
-Create the 1-2-3 scale by updating user\_items dataset. Don't need to update the ActionId\_Label.
+-   Rating of 1 (low) = "select Part"
 
-#### Total Rating of Parent by Visitor
+-   Rating of 2 = "select Part detail"
 
-Show the distribution of the new total rating score.
+-   Rating of 3 (high) = "add to order", "print detail", "save CAD drawing detail", or "print CAD drawing detail"
 
-Compare it to other ratings transformations (i.e. lognormal, square root, coerce upper limit).
+These were coded into our dataset by creating a new variable called **action\_rating**, which was derived from the **ActionId\_label** of every user interaction.
+
+``` r
+user_items <- user_items %>%
+  mutate(action_rating = if_else(ActionId_label == "select Part", 1, 
+                                 if_else(ActionId_label == "select Part detail", 2, 3)))
+
+user_items %>%
+  group_by(action_rating) %>%
+  summarize(frequency = n()) %>%
+  ggplot(aes(x = action_rating, y = frequency / sum(frequency))) +
+    geom_bar(aes(fill = desc(action_rating)), stat = "identity") +
+    labs(title = "Distribution of Implicit Action Ratings taken by Users",
+         subtitle = "on company website",
+         x = NULL,
+         y = "Percent",
+         fill = "Implicit Rating") +
+    geom_text(aes(label = frequency, family = "courier", ), 
+              size = 3,
+              stat= "identity", 
+              vjust = -.5) +
+    scale_y_continuous(labels=scales::percent)
+```
+
+![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-27-1.png)
+
+|  ActionId| ActionId\_label          |  action\_rating|  frequency|  proportion|
+|---------:|:-------------------------|---------------:|----------:|-----------:|
+|         2| select Part              |               1|    4429217|        0.50|
+|         1| add to order             |               3|    3242184|        0.36|
+|         3| select Part detail       |               2|    1068781|        0.12|
+|         5| save CAD drawing detail  |               3|     149957|        0.02|
+|         4| print detail             |               3|      29177|        0.00|
+|         6| print CAD drawing detail |               3|      16759|        0.00|
+
+### Creating a weighted Total Rating per item
+
+Having converted the 6 different possible actions into an implicit rating for each of the `nrow(user_items)` individual user interactions in the user\_items dataset, there is still some more pre-processing required of these **action\_ratings**.
+
+For this recommender system, recommendations of Parent categories were used instead of a specific PartNumber prediction problem. Doing this helps reduce the high dimensionality of the items, therefore reducing the sparsity problem of few users rating a single PartNumber. It also improves the computation time of the recommender system as there are fewer Parent categories to create predicted recommendations for relative to PartNumbers.
+
+The weighted rating, which in its final form is called the total\_rating was derived in a series of steps:
+
+-   **Step 1**: Within each visitor's session (ActionDate) with a Parent category, identify the maximum implicit rating (action\_rating) the user gave to that Parent from its interaction. In the example below, Visitor \#1000368642442 interacted with Parent \#M65-364625 in three different sessions (2-22-2017, 6-14-2017, and 6-23-2017). Their interaction with Parent \#M65-365145 occurred in one session only on 6-7-2017.
+
+| ActionDate |   VisitorId   |   Parent   |  PartNumber | ActionId | ActionId\_label | action\_rating |
+|:----------:|:-------------:|:----------:|:-----------:|:--------:|:---------------:|:--------------:|
+| 2017-06-23 | 1000368642442 | M65-364625 | M6557298085 |     2    |   select Part   |        1       |
+| 2017-06-23 | 1000368642442 | M65-364625 | M6557298085 |     1    |   add to order  |        3       |
+| 2017-06-23 | 1000368642442 | M65-364625 | M6557298095 |     1    |   add to order  |        3       |
+| 2017-06-23 | 1000368642442 | M65-364625 | M6557298095 |     2    |   select Part   |        1       |
+| 2017-06-14 | 1000368642442 | M65-364625 | M6557298105 |     1    |   add to order  |        3       |
+| 2017-06-14 | 1000368642442 | M65-364625 | M6557298105 |     2    |   select Part   |        1       |
+| 2017-06-14 | 1000368642442 | M65-364625 | M6557298115 |     1    |   add to order  |        3       |
+| 2017-06-14 | 1000368642442 | M65-364625 | M6557298115 |     2    |   select Part   |        1       |
+| 2017-02-22 | 1000368642442 | M65-364625 | M6557298185 |     1    |   add to order  |        3       |
+| 2017-02-22 | 1000368642442 | M65-364625 | M6557298185 |     2    |   select Part   |        1       |
+| 2017-06-07 | 1000368642442 | M65-365145 | M6556778115 |     1    |   add to order  |        3       |
+| 2017-06-07 | 1000368642442 | M65-365145 | M6556778115 |     2    |   select Part   |        1       |
+
+For each of the sessions Visitor \#1000368642442 had per table above, we extract the row of the max action\_rating it gave to each Parent category within the specific session.
+
+| ActionDate |   VisitorId   |   Parent   |  PartNumber | ActionId | ActionId\_label | action\_rating |
+|:----------:|:-------------:|:----------:|:-----------:|:--------:|:---------------:|:--------------:|
+| 2017-06-23 | 1000368642442 | M65-364625 | M6557298085 |     1    |   add to order  |        3       |
+| 2017-06-23 | 1000368642442 | M65-364625 | M6557298095 |     1    |   add to order  |        3       |
+| 2017-06-14 | 1000368642442 | M65-364625 | M6557298105 |     1    |   add to order  |        3       |
+| 2017-06-14 | 1000368642442 | M65-364625 | M6557298115 |     1    |   add to order  |        3       |
+| 2017-02-22 | 1000368642442 | M65-364625 | M6557298185 |     1    |   add to order  |        3       |
+| 2017-06-07 | 1000368642442 | M65-365145 | M6556778115 |     1    |   add to order  |        3       |
+
+-   **Step 2**: If there are multiple max action\_rating interactions per Parent within the same session (for example the user did the "add to cart" action over multiple PartNumbers in the single session that inherit from the same Parent category), we will sum these max action\_rating values up within that session to get a session\_action\_rating. The intuition here is that the more PartNumbers in a specific Parent category the user interacted with in a single session is a higher inferred endorsement of that Parent.
+
+Back to our example. Visitor \#1000368642442 did in fact interact with multiple different PartNumbers of the same Parent \#M65-364625 within a couple specific sessions (6-14-2017 and 6-23-2017). Hence multiple rows for those dates as illustrated above. Per the described weighting method, we sum up the max action\_rating values within the session (ActionDate) and Parent category to yield Visitor \#1000368642442's session\_action\_rating with a Parent.
+
+|   VisitorId   |   Parent   | ActionDate | session\_action\_rating |
+|:-------------:|:----------:|:----------:|:-----------------------:|
+| 1000368642442 | M65-364625 | 2017-02-22 |            3            |
+| 1000368642442 | M65-364625 | 2017-06-14 |            6            |
+| 1000368642442 | M65-364625 | 2017-06-23 |            6            |
+| 1000368642442 | M65-365145 | 2017-06-07 |            3            |
+
+-   **Step 3**: Factor in the different number of sessions over time each user has engaged with each Parent category by adding up each user's maximum action\_rating for a Parent category across all their different sessions between 2017-01-31 and 2017-09-08.
+
+Back to our example for Visitor \#1000368642442. They have 3 different session\_action\_rating with Parent \#M65-364625. We will sum up their session\_action\_ratings to get a total\_rating of 15 for Parent \#M65-364625 For the other Parent \#M65-365145, this visitor only interacted with this during a single session, so it's total\_rating will equal its session\_actiong\_rating of 3.
+
+|   VisitorId   |   Parent   | total\_rating |
+|:-------------:|:----------:|:-------------:|
+| 1000368642442 | M65-364625 |       15      |
+| 1000368642442 | M65-365145 |       3       |
+
+-   **Step 4**: After weighting the action\_rating per user for each Parent by considering diversity of the PartNumbers of a Parent they interacted with per session and the total number of sessions they interacted with the Parent over time, the ratings need to be transformed to reduce extreme outliers.
+
+For our example for Visitor \#1000368642442, the different total\_ratings could look something like this.
+
+|   VisitorId   |   Parent   | total\_rating | total\_rating\_sqrt | total\_rating\_logn | total\_rating\_max10 |
+|:-------------:|:----------:|:-------------:|:-------------------:|:-------------------:|:--------------------:|
+| 1000368642442 | M65-364625 |       15      |       3.872983      |       2.708050      |          10          |
+| 1000368642442 | M65-365145 |       3       |       1.732051      |       1.098612      |           3          |
+
+The actual code for the preprocessing of Steps 1 through 4 proceeds below via use of a `dplyr` analysis pipeline:
+
+``` r
+user_ratings <- user_items %>%
+  select(VisitorId, Parent, ActionDate, action_rating) %>%
+  # create group window for each Visitor's individual session(day) with a Parent# 
+  group_by(VisitorId, Parent, ActionDate) %>%
+  # Step1: w/in window, keep row(s) of max action_rating for that specific session.
+  filter(action_rating == max(action_rating)) %>%
+  # Step2: sum up all max action_ratings to account for >1 max actions with diff. 
+  # PartNumbers of that Parent# during session. An additive weight w/in session of a Parent#.
+  summarize(session_action_rating = sum(action_rating)) %>%
+  # change group window to roll up next aggregations to Visitor:Parent, across all sessions. 
+  group_by(VisitorId, Parent) %>%
+  # Step3: per Parent per Visitor, sum the session_action_rating across all sessions (days).
+  summarize(total_rating = sum(session_action_rating)) %>%
+  ungroup() %>%
+  # Step4: ratings transformation candidates
+  mutate(total_rating_sqrt = sqrt(total_rating),
+         total_rating_logn = log(total_rating),
+         total_rating_max10 = ifelse(total_rating > 10, 10, total_rating)) %>%
+  arrange(VisitorId, total_rating)
+```
 
 #### Example of the Total Rating pre-processing pipeline.
 
 walk through example records of the pre-processing steps for the Total Rating to illustrate the transformations.
 
+### Total Rating of Parent by Visitor
+
+Show the distribution of the new total rating score.
+
+Compare it to other ratings transformations (i.e. lognormal, square root, coerce upper limit).
+
 ### Setting up a User Ratings Matrix
+
+Collaborative Filtering Algorithms
+----------------------------------
+
+For collaborative filtering recommender systems, the recommendations are largely based on the ability to identify recommendations by
+
+-   1.  finding similar users who've rated the same items similarly to me, which addresses a recommendation hypothesis of "what other users are like me, and what items do they purchase?". This is known as **user-based collaborative filtering**. It finds users who have similar interest in items as you and recommends new items based on what they may rate highly.
+
+-   1.  We can also make recommendations by finding items that are similarly rated to the ones that a user has rated. In this case, neighborhoods are defined not by similar users but by items with similar ratings pattern to items the user has already rated. This is known as **item-based collaborative filtering**. It addresses a recommendation hypothesis of "people who liked this also tend to like this" or "What items are most similar to the ones that I’ve purchased that may interest me?"
 
 User Based Collaborative Filtering
 ----------------------------------

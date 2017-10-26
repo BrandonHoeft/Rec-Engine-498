@@ -1,7 +1,7 @@
 ---
 title: "EDA and Collaborative Filtering"
 author: "Brandon Hoeft"
-date: "October 22, 2017"
+date: "October 26, 2017"
 output: # http://rmarkdown.rstudio.com/markdown_document_format.html
   md_document:
     variant: markdown_github
@@ -530,17 +530,83 @@ Having converted the 6 different possible actions into an implicit rating for ea
 
 For this recommender system, recommendations of Parent categories were used instead of a specific PartNumber prediction problem. Doing this helps reduce the high dimensionality of the items, therefore reducing the sparsity problem of few users rating a single PartNumber. It also improves the computation time of the recommender system as there are fewer Parent categories to create predicted recommendations for relative to PartNumbers. 
 
-The weighted rating, which in its final form is called the **total_rating** was derived in a series of steps:
+The weighted rating, which in its final form is called the total_rating was derived in a series of steps:
 
-* Step 1: Within each visitor's session (**ActionDate**) with a **Parent** category, identify the maximum implicit rating (**action_rating**) the user gave to that Parent from its interaction. 
+* **Step 1**: Within each visitor's session (ActionDate) with a Parent category, identify the maximum implicit rating (action_rating) the user gave to that Parent from its interaction. In the example below, Visitor #1000368642442 interacted with Parent #M65-364625 in three different sessions (2-22-2017, 6-14-2017, and  6-23-2017). Their interaction with Parent #M65-365145 occurred in one session only on 6-7-2017.    
 
-* Step 2: If there were multiple max **action_rating** interactions per Parent within the same session (for example the user did the "add to cart" action over multiple PartNumbers in the single session that inherit from the same Parent category), we will sum these max **action_rating** values up within that session. The intuition here is that the more PartNumbers in that **Parent** category the user interacted with in a single session is a higher endorsement of that **Parent**.
+``` {r}
+example_step1 <- user_items %>%
+  select(ActionDate, VisitorId, Parent, PartNumber, starts_with("Action"), -ActionCount) %>%
+  arrange(VisitorId, Parent, PartNumber, ActionDate) %>%
+  slice(1:1000)
 
-* Step 3: Factor in the different number of sessions over time each user has engaged with each **Parent** category by adding up each user's maximum **action_rating** for a **Parent** category across all their different sessions between `r min(user_items$ActionDate)` and `r max(user_items$ActionDate)`.
+example_step1 %>%
+  slice(104:115) %>%
+  kable(align = 'c')
+```
 
-* Step 4: After weighting the **action_rating** per user for each Parent by considering diversity of the PartNumbers of a Parent they interacted with per session and the total number of sessions they interacted with the Parent over time, the ratings need to be transformed to reduce extreme outliers. 
+For each of the sessions Visitor #1000368642442 had per table above, we extract the row of the max action_rating it gave to each Parent category within the specific session.
 
-The preprocessing of Step1 through 4 looks as follows using a `dplyr` pipeline:
+``` {r}
+example_step1 <- example_step1 %>%
+  slice(104:115) %>%
+  group_by(VisitorId, Parent, ActionDate) %>%
+  # w/in window, keep row(s) of max action_rating for that specific session.
+  filter(action_rating == max(action_rating)) %>%
+  arrange(VisitorId, Parent, PartNumber, ActionDate) %>%
+  ungroup()
+
+example_step1 %>%
+  kable(align = 'c')
+```
+
+* **Step 2**: If there are multiple max action_rating interactions per Parent within the same session (for example the user did the "add to cart" action over multiple PartNumbers in the single session that inherit from the same Parent category), we will sum these max action_rating values up within that session to get a session_action_rating. The intuition here is that the more PartNumbers in a specific Parent category the user interacted with in a single session is a higher inferred endorsement of that Parent. 
+
+Back to our example. Visitor #1000368642442 did in fact interact with multiple different PartNumbers of the same Parent #M65-364625 within a couple specific sessions (6-14-2017 and 6-23-2017). Hence multiple rows for those dates as illustrated above. Per the described weighting method, we sum up the max action_rating values within the session (ActionDate) and Parent category to yield Visitor #1000368642442's session_action_rating with a Parent. 
+
+``` {r}
+example_step2 <- example_step1 %>%
+  group_by(VisitorId, Parent, ActionDate) %>%
+  # Step2
+  summarize(session_action_rating = sum(action_rating)) %>%
+  arrange(VisitorId, Parent, ActionDate) %>%
+  ungroup()
+
+example_step2 %>%
+  kable(align = 'c')
+
+
+```
+
+* **Step 3**: Factor in the different number of sessions over time each user has engaged with each Parent category by adding up each user's maximum action_rating for a Parent category across all their different sessions between `r min(user_items$ActionDate)` and `r max(user_items$ActionDate)`.
+
+Back to our example for Visitor #1000368642442. They have 3 different session_action_rating with Parent #M65-364625. We will sum up their session_action_ratings to get a total_rating of 15 for Parent #M65-364625 For the other Parent #M65-365145, this visitor only interacted with this during a single session, so it's total_rating will equal its session_actiong_rating of 3. 
+
+``` {r}
+example_step3 <- example_step2 %>%
+  # Step3
+  group_by(VisitorId, Parent) %>%
+  summarize(total_rating = sum(session_action_rating)) %>%
+  arrange(VisitorId, Parent) %>%
+  ungroup()
+
+example_step3 %>%
+  kable(align = 'c')
+```
+
+* **Step 4**: After weighting the action_rating per user for each Parent by considering diversity of the PartNumbers of a Parent they interacted with per session and the total number of sessions they interacted with the Parent over time, the ratings need to be transformed to reduce extreme outliers. 
+
+For our example for Visitor #1000368642442, the different total_ratings could look something like this.
+
+``` {r}
+example_step3 %>%
+  mutate(total_rating_sqrt = sqrt(total_rating),
+         total_rating_logn = log(total_rating),
+         total_rating_max10 = ifelse(total_rating > 10, 10, total_rating)) %>%
+  kable(align = 'c')
+```
+
+The actual code for the preprocessing of Steps 1 through 4 proceeds below via use of a `dplyr` analysis pipeline:
 
 ``` {r echo = TRUE}
 
