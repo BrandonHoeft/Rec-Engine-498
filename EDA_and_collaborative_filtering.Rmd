@@ -463,8 +463,10 @@ user_items %>%
 user_items %>%
   group_by(ActionId, ActionId_label) %>%
   summarize(frequency = n()) %>%
+  ungroup() %>%
+  mutate(proportion = round(frequency / sum(frequency), 2)) %>%
   arrange(desc(frequency)) %>%
-  kable(caption = "ActionId Distribution for every row in dataset")
+  kable()
 ```
 
 ### (TO EXPLORE) What percent of the time is selecting a part a precursor to adding to cart?
@@ -472,15 +474,101 @@ user_items %>%
 If most of the clicks in the dataset reflect that generally, these ultimately lead to adding items to cart, perhaps this is some evidence that customers tend to know what they want when they land on the website. They aren't just querying the site or app out of general interest. 
 
 
-## More Data Wrangling: Creating a Ratings Method
+## More Data Wrangling: Creating Ratings
 
 Having explored information about the users and the items they've interacted with in the dataset, we need to devise a ratings system derived from user click actions. These user click actions are not explicit ratings but *inferred ratings* because the user is not telling us directly that they like this item. But, the actions themselves have a hierarchy that can be interpreted as different levels of interest, which may enable us to create "implicit ratings". In our company's case, a higher rating would correspond to which actions we would interpret to be closest to a purchase decision or showing a high level of interest. 
 
 This is generally a very popular way of devising ratings for ecommerce because most online interactions by web users aren't explicit ratings by users of a page or product, but simply interactions with that page or product.
 
+### Convert Actions to Implicit Ratings
 
+After consultation with Matt, the subject matter expert at the company, we decided to convert the values from the **ActionId** column into 3 distinct ratings. Specifically, the 6 different actions a user could take when interacting with distributed into a 1,2,3 ratings system from lowest to highest inferred rating. 
 
+* Rating of 1 (low) = "select Part"
 
+* Rating of 2 = "select Part detail"
+
+* Rating of 3 (high) = "add to order", "print detail", "save CAD drawing detail", or "print CAD drawing detail"
+
+These were coded into our dataset by creating a new variable called **action_rating**, which was derived from the **ActionId_label** of every user interaction. 
+
+``` {r echo = TRUE}
+user_items <- user_items %>%
+  mutate(action_rating = if_else(ActionId_label == "select Part", 1, 
+                                 if_else(ActionId_label == "select Part detail", 2, 3)))
+
+user_items %>%
+  group_by(action_rating) %>%
+  summarize(frequency = n()) %>%
+  ggplot(aes(x = action_rating, y = frequency / sum(frequency))) +
+    geom_bar(aes(fill = desc(action_rating)), stat = "identity") +
+    labs(title = "Distribution of Implicit Action Ratings taken by Users",
+         subtitle = "on company website",
+         x = NULL,
+         y = "Percent",
+         fill = "Implicit Rating") +
+    geom_text(aes(label = frequency, family = "courier", ), 
+              size = 3,
+              stat= "identity", 
+              vjust = -.5) +
+    scale_y_continuous(labels=scales::percent)
+```
+
+``` {r}
+user_items %>%
+  group_by(ActionId, ActionId_label, action_rating) %>%
+  summarize(frequency = n()) %>%
+  ungroup() %>%
+  mutate(proportion = round(frequency / sum(frequency), 2)) %>%
+  arrange(desc(frequency)) %>%
+  kable()
+```
+
+### Creating a weighted Total Rating per item
+
+Having converted the 6 different possible actions into an implicit rating for each of the `nrow(user_items)` individual user interactions in the user_items dataset, there is still some more pre-processing required of these **action_ratings**.
+
+For this recommender system, recommendations of Parent categories were used instead of a specific PartNumber prediction problem. Doing this helps reduce the high dimensionality of the items, therefore reducing the sparsity problem of few users rating a single PartNumber. It also improves the computation time of the recommender system as there are fewer Parent categories to create predicted recommendations for relative to PartNumbers. 
+
+The weighted rating, which in its final form is called the **total_rating** was derived in a series of steps:
+
+* Step 1: Within each visitor's session (**ActionDate**) with a **Parent** category, identify the maximum implicit rating (**action_rating**) the user gave to that Parent from its interaction. 
+
+* Step 2: If there were multiple max **action_rating** interactions per Parent within the same session (for example the user did the "add to cart" action over multiple PartNumbers in the single session that inherit from the same Parent category), we will sum these max **action_rating** values up within that session. The intuition here is that the more PartNumbers in that **Parent** category the user interacted with in a single session is a higher endorsement of that **Parent**.
+
+* Step 3: Factor in the different number of sessions over time each user has engaged with each **Parent** category by adding up each user's maximum **action_rating** for a **Parent** category across all their different sessions between `r min(user_items$ActionDate)` and `r max(user_items$ActionDate)`.
+
+* Step 4: After weighting the **action_rating** per user for each Parent by considering diversity of the PartNumbers of a Parent they interacted with per session and the total number of sessions they interacted with the Parent over time, the ratings need to be transformed to reduce extreme outliers. 
+
+The preprocessing of Step1 through 4 looks as follows using a `dplyr` pipeline:
+
+``` {r echo = TRUE}
+
+user_ratings <- user_items %>%
+  select(VisitorId, Parent, ActionDate, action_rating) %>%
+  # create group window for each Visitor's individual session(day) with a Parent# 
+  group_by(VisitorId, Parent, ActionDate) %>%
+  # Step1: w/in window, keep row(s) of max action_rating for that specific session.
+  filter(action_rating == max(action_rating)) %>%
+  # Step2: sum up all max action_ratings to account for >1 max actions with diff. 
+  # PartNumbers of that Parent# during session. An additive weight w/in session of a Parent#.
+  summarize(session_action_rating = sum(action_rating)) %>%
+  # change group window to roll up next aggregations to Visitor:Parent, across all sessions. 
+  group_by(VisitorId, Parent) %>%
+  # Step3: per Parent per Visitor, sum the session_action_rating across all sessions (days).
+  summarize(total_rating = sum(session_action_rating)) %>%
+  ungroup() %>%
+  # Step4: ratings transformation candidates
+  mutate(total_rating_sqrt = sqrt(total_rating),
+         total_rating_logn = log(total_rating),
+         total_rating_max10 = ifelse(total_rating > 10, 10, total_rating)) %>%
+  arrange(VisitorId, total_rating)
+
+```
+
+#### Example of the Total Rating pre-processing pipeline.
+
+walk through example records of the pre-processing steps for the Total Rating to illustrate the transformations.
 
 ### Total Rating of Parent by Visitor 
 
@@ -488,19 +576,15 @@ Show the distribution of the new total rating score.
 
 Compare it to other ratings transformations (i.e. lognormal, square root, coerce upper limit). 
 
-### Example of the Total Rating pre-processing pipeline.
-
-walk through example records of the pre-processing steps for the Total Rating to illustrate the transformations.
-
 ### Setting up a User Ratings Matrix
 
 ## Collaborative Filtering Algorithms
 
 For collaborative filtering recommender systems, the recommendations are largely based on the ability to identify recommendations by
 
-* a) finding similar users who've rated the same items similarly to me, which addresses a recommendation hypothesis of "who are my nearest neighbors and what do they like?". This is known as **user-based collaborative filtering**. It finds users who have similar interest in items as you and recommends new items based on what they may rate highly. 
+* a) finding similar users who've rated the same items similarly to me, which addresses a recommendation hypothesis of "what other users are like me, and what items do they purchase?". This is known as **user-based collaborative filtering**. It finds users who have similar interest in items as you and recommends new items based on what they may rate highly. 
 
-* b) We can also make recommendations by finding items that are similarly rated to the ones that a user has rated. In this case, neighborhoods are defined not by similar users but by items with similar ratings pattern to items the user has already rated. This is known as **item-based collaborative filtering**. It addresses a recommendation hypothesis of "people who liked this also tend to like this." 
+* b) We can also make recommendations by finding items that are similarly rated to the ones that a user has rated. In this case, neighborhoods are defined not by similar users but by items with similar ratings pattern to items the user has already rated. This is known as **item-based collaborative filtering**. It addresses a recommendation hypothesis of "people who liked this also tend to like this" or "What items are most similar to the ones that I’ve purchased that may interest me?" 
 
 ## User Based Collaborative Filtering
 
