@@ -37,14 +37,14 @@ library(ggplot2) # data viz.
 library(pryr) # mem_used() and object_size() functions to manage/understand memory usage.
 ```
 
-To read the Part items data and the user webactivity data from s3 I passed read_table2() functions for reading tabular data into the `aws.s3` functions for reading objects from AWS. 
+To read the Part items data and the user webactivity data from s3 I passed read_table2() functions for reading tabular data to read items dataset and the read_csv() function to read in the web user click data CSV files. 
 
 ``` {r eval = FALSE, include = FALSE}
 # specify personal account keys as environment variables so I can read my s3 object(s) from AWS. 
 
 # DO NOT DO NOT DO NOT DO NOT DO NOT SAVE KEY in code or render in output!!!! Could compromise AWS account. 
-#Sys.setenv("AWS_ACCESS_KEY_ID" = "",
-#           "AWS_SECRET_ACCESS_KEY" = "")
+Sys.setenv("AWS_ACCESS_KEY_ID" = "",
+           "AWS_SECRET_ACCESS_KEY" = "")
 
 ```
 
@@ -58,20 +58,52 @@ items <- s3read_using(FUN = read_table2,
                       bucket = "pred498team5")
 
 # users: click data from the company website for a random day of user's selected, their activity for past 3 months and click summaries of how they interacted with parts. 
-users <- s3read_using(FUN = read_table2, 
+
+# web user click data from Feb - Mar 2017
+users_febmar17 <- s3read_using(FUN = read_csv, 
                       col_names = TRUE,
                       col_types = "ccici",
-                      object = "obfuscatedWebActivity_10_16_17.txt", 
+                      object = "obfuscatedWebActivity7124.csv", 
                       bucket = "pred498team5")
+
+# web user click data from April - June 2017
+users_aprmayjun17 <- s3read_using(FUN = read_csv, 
+                      col_names = TRUE,
+                      col_types = "ccici",
+                      object = "obfuscatedWebActivity7127.csv", 
+                      bucket = "pred498team5")
+
+# web user click data from July - August 2017
+users_julaug17 <- s3read_using(FUN = read_csv, 
+                      col_names = TRUE,
+                      col_types = "ccici",
+                      object = "obfuscatedWebActivity7129.csv", 
+                      bucket = "pred498team5")
+
+
 ```
 
-## Wrangling the Dataset 
+The 3 separate user click activity queries performed by Matt on his company's graph database were required in order to get around maximum data request requirements. They contain the same information, with the following columns:
 
-The only information I'm particularly interested in from the **items** dataset is the Parent column, and left joining that to the matching PartNumber in the users data. Building a recommender system using the Parent family instead of the specific PartNumber will be discussed later. 
+``` {r echo = TRUE}
+names(users_aprmayjun17)
+```
+
+These 3 datasets of user click activity covering different time periods between February - August 2017 need to be unioned, or combined, into a single dataset. 
 
 ``` {r echo = TRUE}
 
-# left join the parent family to the users PartNumber
+users <- bind_rows(users_febmar17, users_aprmayjun17, users_julaug17)
+
+```
+
+## Wrangling the Data
+
+The **items** dataset contains [obfuscated](https://en.wikipedia.org/wiki/Obfuscation_(software)) information about all of the PartNumbers in the company's inventory, as well as information on the catalog that the PartNumber may have been listed in, and the first 20 attributes and attribute values describing the specifications of each PartNumber. It is a very large dataset with `r nrow(items)` rows, representing the unique PartNumbers.  
+
+The only information we're particularly interested in from the **items** dataset is the Parent column, and left joining that to the matching PartNumber in the users data. Building a recommender system using the Parent family instead of the specific PartNumber will be discussed later. The items dataset has a lot of columns that describe attributes of each PartNumber and Parent. For purposes of a collaborative filtering model, we don't need to know these, any columns that include *"Attr"*, *"Val"*, or *"Catalog"* in its name are dropped. 
+
+``` {r echo = TRUE}
 user_items <- users %>%
   left_join(items, by = "PartNumber") %>%
   mutate(ActionDate = ymd(ActionDate), # parse into a date format.
@@ -82,19 +114,37 @@ user_items <- users %>%
                                             "save CAD drawing detail",
                                             "print CAD drawing detail"))) %>% 
   select(-starts_with("Val"), -starts_with("Attr"), -starts_with("Catalog"))
-
-# Check that left join worked and initial columns match identically. 
-all.equal(users[1:3], user_items[1:3])
-
-remove(users)
-remove(items)
 ```
 
-### Initial EDA
+Check that the left join preserved all of the original data in our full users dataset after joining in the Parent value associated with each PartNumber searched by users.
 
-With a baseline dataset, I can start exploring some information about the users. I'll refer to them as visitors, since these are web click data about how visitors/customers of a manufacturing supplier are interacting with the company's website and mobile application. 
+``` {r echo = TRUE}
+all.equal(users[1:5], user_items[1:5])
+```
+
+Our original datasets are taking up a lot of memory. Specifically, all other datasets other than user_items are currently taking up `r object_size(users, items, users_febmar17, users_aprmayjun17, users_julaug17)`MB of RAM. We'll remove them since everything we need in terms of user click data, the PartNumbers, Parent, actions taken, and the action date are all in the user_items dataset. Our main user_items dataset is quite large, requiring `r object_size(user_items)` MB of RAM. 
+
+``` {r echo = TRUE}
+# We can remove the other datasets we don't need anymore to save available RAM. 
+remove(users, items, users_febmar17, users_aprmayjun17, users_julaug17)
+
+```
+
+
+### High Level Description of the User & Items Data
+
+The user click data (**may refer to users interchangeably as visitors**) came from three separate graph database queries that were required in order to get around maximum data request requirements. Together, the 3 user datasets represent click data from a random sample of visitors to the company's website who have an account with the company. These visitors indvidual session click activities were queried over a time period from February 2017 through August 2017. These data describe how users/visitors of a manufacturing supplier are interacting with the company's website. Sessions within the context of this dataset refers to a specific date that the user engaged with a PartNumber. 
+
+With a baseline dataset, I can start describing some information about the user activity. 
 
 We'll start by asking some questions of the data. The web activity covered by these data begins on `r min(user_items$ActionDate)` and goes through `r max(user_items$ActionDate) `, covering a span of `r max(user_items$ActionDate) - min(user_items$ActionDate)` days. 
+
+``` {r echo = TRUE}
+user_items %>%
+  group_by(ActionDate) %>%
+  ggplot()
+
+```
 
 #### Summary of Unique Visitors, PartNumbers, Parents
 
