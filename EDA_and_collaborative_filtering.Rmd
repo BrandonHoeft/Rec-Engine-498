@@ -131,28 +131,98 @@ remove(users, items, users_febmar17, users_aprmayjun17, users_julaug17)
 ```
 
 
-### High Level Description of the User & Items Data
+### Descriptions of the User & Items Data
 
-The user click data (**may refer to users interchangeably as visitors**) came from three separate graph database queries that were required in order to get around maximum data request requirements. Together, the 3 user datasets represent click data from a random sample of visitors to the company's website who have an account with the company. These visitors indvidual session click activities were queried over a time period from February 2017 through August 2017. These data describe how users/visitors of a manufacturing supplier are interacting with the company's website. Sessions within the context of this dataset refers to a specific date that the user engaged with a PartNumber. 
+The user click data (**may refer to users interchangeably as visitors**) came from three separate graph database queries that were required in order to get around maximum data request requirements. Together, the 3 user datasets represent click data from a **random sample** of accounts that purchase from the company's website who had made purchases recently. These visitor's individual  click activities were queried over a time period from `r min(user_items$ActionDate)` through `r max(user_items$ActionDate) `, covering a range of `r max(user_items$ActionDate) - min(user_items$ActionDate)` days. Therefore, these data may provide insight into how users/visitors of a manufacturing supplier are interacting with the company's website, which can form the basis of learning from and providing recommendations on items tailored to each user's behavior and interests to improve the user experience and find items faster. Each variable in the main dataset is defined as follows:
 
-With a baseline dataset, I can start describing some information about the user activity. 
+* *VisitorId*: This represents the unique account associated with the customer. It is not based on IP address or other geo-tagging information. The queries set up to curate this dataset were intentionally focused on identifying actual customers with account logins who have purchased from the company in the past. There are `r unique(user_items$VisitorId) %>% length()` unique VisitorIDs in this random sample of user data. 
 
-We'll start by asking some questions of the data. The web activity covered by these data begins on `r min(user_items$ActionDate)` and goes through `r max(user_items$ActionDate) `, covering a span of `r max(user_items$ActionDate) - min(user_items$ActionDate)` days. 
+* *PartNumber*: This represents the ID of the specific product Part Number (ex. a pair of gloves, welding mask, pipe, cable, screw) that the VisitorId interacted with in some way(s) during their web session. 
+
+* *Parent*: The Parent level is the hierarchical category of similar products that every specific PartNumbers roll up to. Within the copmany website, it's a hyperlink associated with the PartNumber. Parent groups will vary in size. It is a way that individual merchandising managers at the company decide to categorize and organize the hundreds of thousands of PartNumbers. 
+
+* *ActionId*: represents the type of click action that occurred. There are `r unique(user_items$ActionId) %>% length()` unique actions that a user can take, which are defined by the next variable for each value of ActionId.
+
+* *ActionId_label*: The `r unique(user_items$ActionId) %>% length()` unique actions for each ActionId value are
+  + **1 = add to order**: the user added the PartNumber to their order.
+  + **2 = select Part**: the user clicked on the PartNumber to get more information. This is the most basic user action.
+  + **3 = select Part detail**: the user selected to drill in for more detail about the PartNumber interacting with.
+  + **4 = print detail**: the user selected to print the detail about the PartNumber that they drilled into.
+  + **5 = save CAD drawing detail**: the user saved the computer aided draft (CAD) drawing about the PartNumber. 
+  + **6 = print CAD drawing detail**: the user printed the computer aided draft (CAD) drawing about the PartNumber. 
+  
+* *ActionDate*: This is the date of the user's session with a specific PartNumber(s). A user may have had multiple sessions with different PartNumbers in the same day. 
+
+* **ActionCount**: For each ActionId that a user took while interacting with a PartNumber within a session, a count of 1 is recorded. So if visitor X interacted with PartNumber Y today by going back and forth and selecting the same PartNumber three times within this day's session, visitor X's ActionCount for PartNumber Y for today will be 3. 
+
+
+With a baseline dataset and description of the different variables provided above, we can start describing some information about the user activity. 
+
+Again, the web activity covered by these user clicks on the website begins on `r min(user_items$ActionDate)` and goes through `r max(user_items$ActionDate) `, covering a span of `r max(user_items$ActionDate) - min(user_items$ActionDate)` days. 
+
+#### Weekly Users and Total Clicks
 
 ``` {r echo = TRUE}
-user_items %>%
-  group_by(ActionDate) %>%
-  ggplot()
+weekly_activity <- user_items %>%
+  mutate(week_ending_date = ceiling_date(ActionDate, "week")) %>%
+  group_by(week_ending_date) %>%
+  summarize(unique_users = length(unique(VisitorId)),
+            total_clicks = n()) %>%
+  arrange(week_ending_date)
+
+temp <- weekly_activity %>%
+  mutate(week_ending_date = as.Date(week_ending_date, "%Y-%m-%d")) 
+
+
+weekly_activity %>%
+  mutate(week_ending_date = as.Date(week_ending_date, "%Y-%m-%d")) %>% 
+  gather(key = key, value = value, -week_ending_date) %>%
+  ggplot(aes(x = week_ending_date, y = value, group = key)) +
+    geom_line(aes(color = key)) +
+    scale_x_date(date_breaks = ("1 month"),
+               date_labels = c(month.name[1:9])) +
+    scale_y_continuous(labels = function(n) format(n, scientific = FALSE)) + # raw frequency scale
+    labs(title = "Weekly Distribution of Sample of Users and their total click Actions",
+         x = "2017",
+         y = "Count") 
 
 ```
 
-#### Summary of Unique Visitors, PartNumbers, Parents
+Generally, the number of unique users each week in this dataset distributes as indicated below. There was one particularly unusual week around May 14, where there was almost no user or click activity noted, as indicated by the graph above. 
 
-Initial analysis shows that there are `r unique(user_items$VisitorId) %>% length()` unique VisitorID numbers in this dataset. 
+``` {r echo = TRUE}
+library(knitr)
+weekly_activity %>%
+  summarize(First_Quartile = quantile(unique_users, .25),
+            median = median(unique_users),
+            mean = mean(unique_users),
+            Third_Quartile = quantile(unique_users, .75),
+            Std_Deviation = sd(unique_users)
+            ) %>%
+  kable(caption = 'Typical Count of Unique Users by Week', align = 'c')
+```
+
+The number of clicks by these unique users generally distributes as indicated by the table below. There was one particularly unusual week around May 14, where there was almost no user or click activity noted, as indicated by the graph above. 
+
+``` {r echo = TRUE}
+library(knitr)
+weekly_activity %>%
+  summarize(First_Quartile = quantile(total_clicks, .25),
+            median = median(total_clicks),
+            mean = mean(total_clicks),
+            Third_Quartile = quantile(total_clicks, .75),
+            Std_Deviation = sd(total_clicks)
+            ) %>%
+  kable(caption = 'Typical Count of total clicks by Week', align = 'c')
+```
+
+#### Description of Unique Visitors, PartNumbers, Parents
+
+This was described before when defining the variables in the data, but I'll reiterate it here too. Initial analysis shows that there are `r unique(user_items$VisitorId) %>% length()` unique VisitorID numbers in the entire dataset of randomly sampled user activity from `r min(user_items$ActionDate)` through `r max(user_items$ActionDate)`. 
 
 There are `r unique(user_items$PartNumber) %>% length()` unique PartNumbers associated with the visitor web activity data.
 
-Instead of looking at very specific PartNumbers, we can also roll the analysis up to the Parent level. The Parent level is a grouping of similar PartNumber products to a parent family. Within the website, it's a hyperlink associated with the PartNumber. Parent groups will vary. It is a way that individual merchandising managers at the company decide to categorize and split stuff up. There are `r unique(user_items$Parent) %>% length()` unique Parent family numbers (referred herein as Parents) associated with the visitor web activity data. 
+Instead of looking at very specific PartNumbers, we can also roll the analysis up to the Parent level, which was defined previously. There are `r unique(user_items$Parent) %>% length()` unique Parent family numbers (referred herein as Parents) associated with the visitor web activity data. 
 
 Code for getting the aforementioned details is below. 
 
@@ -168,7 +238,7 @@ unique(user_items$Parent) %>% length()
 
 #### How do total Action Counts of each visitor distribute? 
 
-Action counts are how often a visitor did a particular action within their session. In a single session (the day of the visitor activity interaction with a PartNumber) if they selected a PartNumber in the carousel, this is reflected as a single row in the dataset, with an ActionCount of 1. If they selected the part 2 times in this session, the ActionCount value is equal to 2. 
+Action counts, as previously defined represent how often a visitor did a particular action within their session. In a single session (the day of the visitor activity interaction with a PartNumber) if they selected a PartNumber in the carousel, this is reflected as a single row in the dataset, with an ActionCount of 1. If they selected the part 2 times in this session, the ActionCount value is equal to 2. 
 
 ``` {r echo = TRUE}
 user_items %>%
@@ -192,7 +262,7 @@ user_items %>%
 
 ```
 
-After careful consideration, it was determined that total actions per PartNumber or per Parent should not influence the implicit rating derived for the recommender. This could be for a variety of reasons, such as selecting a part multiple times in the same session may perhaps be just as indicative of uncertainty as it could be of endorsing that part. 
+After careful consideration, we have determined that total actions per PartNumber or per Parent within a single user session should not influence the implicit rating derived for the recommender. This could be for a variety of reasons, but primarily because there's not a strong theoretical basis that repeating an action in a single session with an item is an endorsement of that item. For example, selecting a part multiple times in the same session may perhaps be just as indicative of uncertainty or confusion as it could be of an interest in the item. 
 
 #### How many unique PartNumbers is each visitor interacting with? 
 
