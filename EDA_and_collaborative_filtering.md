@@ -17,7 +17,6 @@
 -   [More Data Wrangling: Creating Ratings](#more-data-wrangling-creating-ratings)
     -   [Convert Actions to Implicit Ratings](#convert-actions-to-implicit-ratings)
     -   [Creating a weighted Total Rating per item](#creating-a-weighted-total-rating-per-item)
-        -   [Example of the Total Rating pre-processing pipeline.](#example-of-the-total-rating-pre-processing-pipeline.)
     -   [Total Rating of Parent by Visitor](#total-rating-of-parent-by-visitor)
     -   [Setting up a User Ratings Matrix](#setting-up-a-user-ratings-matrix)
 -   [Collaborative Filtering Algorithms](#collaborative-filtering-algorithms)
@@ -538,7 +537,7 @@ The weighted rating, which in its final form is called the total\_rating was der
 | 2017-06-07 | 1000368642442 | M65-365145 | M6556778115 |     1    |   add to order  |        3       |
 | 2017-06-07 | 1000368642442 | M65-365145 | M6556778115 |     2    |   select Part   |        1       |
 
-For each of the sessions Visitor \#1000368642442 had per table above, we extract the row of the max action\_rating it gave to each Parent category within the specific session.
+    For each of the sessions Visitor #1000368642442 had per table above, we extract the row of the max   action_rating it gave to each Parent category within the specific session.
 
 | ActionDate |   VisitorId   |   Parent   |  PartNumber | ActionId | ActionId\_label | action\_rating |
 |:----------:|:-------------:|:----------:|:-----------:|:--------:|:---------------:|:--------------:|
@@ -551,7 +550,7 @@ For each of the sessions Visitor \#1000368642442 had per table above, we extract
 
 -   **Step 2**: If there are multiple max action\_rating interactions per Parent within the same session (for example the user did the "add to cart" action over multiple PartNumbers in the single session that inherit from the same Parent category), we will sum these max action\_rating values up within that session to get a session\_action\_rating. The intuition here is that the more PartNumbers in a specific Parent category the user interacted with in a single session is a higher inferred endorsement of that Parent.
 
-Back to our example. Visitor \#1000368642442 did in fact interact with multiple different PartNumbers of the same Parent \#M65-364625 within a couple specific sessions (6-14-2017 and 6-23-2017). Hence multiple rows for those dates as illustrated above. Per the described weighting method, we sum up the max action\_rating values within the session (ActionDate) and Parent category to yield Visitor \#1000368642442's session\_action\_rating with a Parent.
+    Back to our example. Visitor \#1000368642442 did in fact interact with multiple different PartNumbers of the same Parent \#M65-364625 within a couple specific sessions (6-14-2017 and 6-23-2017). Hence multiple rows for those dates as illustrated above. Per the described weighting method, we sum up the max action\_rating values within the session (ActionDate) and Parent category to yield Visitor \#1000368642442's session\_action\_rating with a Parent.
 
 |   VisitorId   |   Parent   | ActionDate | session\_action\_rating |
 |:-------------:|:----------:|:----------:|:-----------------------:|
@@ -562,7 +561,7 @@ Back to our example. Visitor \#1000368642442 did in fact interact with multiple 
 
 -   **Step 3**: Factor in the different number of sessions over time each user has engaged with each Parent category by adding up each user's maximum action\_rating for a Parent category across all their different sessions between 2017-01-31 and 2017-09-08.
 
-Back to our example for Visitor \#1000368642442. They have 3 different session\_action\_rating with Parent \#M65-364625. We will sum up their session\_action\_ratings to get a total\_rating of 15 for Parent \#M65-364625 For the other Parent \#M65-365145, this visitor only interacted with this during a single session, so it's total\_rating will equal its session\_actiong\_rating of 3.
+    Back to our example for Visitor \#1000368642442. They have 3 different session\_action\_rating with Parent \#M65-364625. We will sum up their session\_action\_ratings to get a total\_rating of 15 for Parent \#M65-364625 For the other Parent \#M65-365145, this visitor only interacted with this during a single session, so it's total\_rating will equal its session\_actiong\_rating of 3.
 
 |   VisitorId   |   Parent   | total\_rating |
 |:-------------:|:----------:|:-------------:|
@@ -571,7 +570,7 @@ Back to our example for Visitor \#1000368642442. They have 3 different session\_
 
 -   **Step 4**: After weighting the action\_rating per user for each Parent by considering diversity of the PartNumbers of a Parent they interacted with per session and the total number of sessions they interacted with the Parent over time, the ratings need to be transformed to reduce extreme outliers.
 
-For our example for Visitor \#1000368642442, the different total\_ratings could look something like this.
+    For our example for Visitor \#1000368642442, the different total\_ratings could look something like this.
 
 |   VisitorId   |   Parent   | total\_rating | total\_rating\_sqrt | total\_rating\_logn | total\_rating\_max10 |
 |:-------------:|:----------:|:-------------:|:-------------------:|:-------------------:|:--------------------:|
@@ -601,10 +600,6 @@ user_ratings <- user_items %>%
          total_rating_max10 = ifelse(total_rating > 10, 10, total_rating)) %>%
   arrange(VisitorId, total_rating)
 ```
-
-#### Example of the Total Rating pre-processing pipeline.
-
-walk through example records of the pre-processing steps for the Total Rating to illustrate the transformations.
 
 ### Total Rating of Parent by Visitor
 
