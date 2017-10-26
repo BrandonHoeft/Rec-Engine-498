@@ -2,11 +2,11 @@
 title: "EDA and Collaborative Filtering"
 author: "Brandon Hoeft"
 date: "October 22, 2017"
-output: 
-  html_document: 
-    keep_md: yes # http://happygitwithr.com/rmd-test-drive.html#output-format
-    toc: yes
-    toc_depth: 3
+output: # http://rmarkdown.rstudio.com/markdown_document_format.html
+  md_document:
+    variant: markdown_github
+    toc: TRUE
+    toc_depth: 4
 ---
 
 ```{r setup, include = FALSE}
@@ -253,10 +253,10 @@ user_items %>%
   geom_histogram(binwidth = 100, colour = "black", fill = "darkgrey") +
   # median vertical line.
   geom_vline(aes(xintercept = median(activity_count)),
-             color = "dodgerblue3", linetype = "dashed", size = 0.5) +
-  geom_text(aes(0,.002, family = "courier", label = paste("median = ", median(activity_count))),
-            nudge_x = 700, color = "dodgerblue3", size = 4.5) +
-  labs(title = 'Distribution of Total interactions with PartNumbers by each Visitor',
+             color = "black", linetype = "dashed", size = 0.5) +
+  geom_text(aes(0,.0015, family = "courier", label = paste("median = ", median(activity_count))),
+            nudge_x = 1500, color = "black", size = 4.5) +
+  labs(title = 'Distribution of Total ActionCount by each Visitor',
        subtitle = 'binwidth of 100 ',
        x = "Total Actions per Visitor")
 
@@ -280,14 +280,14 @@ user_items %>%
   distinct(PartNumber) %>% # only keep distinct part numbers per visitor.
   summarize(unique_part_count = n()) %>% # get count within the group. 
   ggplot(aes(unique_part_count, y = ..density..)) + 
-  geom_histogram(binwidth = 50, colour = "black", fill = "darkgrey") +
+  geom_histogram(binwidth = 100, colour = "darkgray", fill = "chartreuse3") +
   # median vertical line.
   geom_vline(aes(xintercept = median(unique_part_count)),
-             color = "dodgerblue3", linetype = "dashed", size = 0.5) +
-  geom_text(aes(0,.004, family = "courier", label = paste("median = ", median(unique_part_count))), 
-            nudge_x = 250, color = "dodgerblue3", size = 4.5) +
+             color = "black", linetype = "dashed", size = 0.5) +
+  geom_text(aes(0,.002, family = "courier", label = paste("median = ", median(unique_part_count))), 
+            nudge_x = 600, color = "black", size = 4.5) +
   labs(title = 'Distribution of Unique PartNumber Interactions by each Visitor',
-       subtitle = 'binwidth of 50',
+       subtitle = 'binwidth of 100',
        x = 'Unique PartNumbers per Visitor')
 
 ```
@@ -310,12 +310,12 @@ user_items %>%
   distinct(Parent) %>% # only keep distinct parent per visitor.
   summarize(unique_parent_count = n()) %>% # get count within the group. 
   ggplot(aes(unique_parent_count, y = ..density..)) + 
-  geom_histogram(binwidth = 50, colour = "black", fill = "darkgrey") +
+  geom_histogram(binwidth = 50, colour = "darkgray", fill = "cadetblue3") +
   # median vertical line.
   geom_vline(aes(xintercept = median(unique_parent_count)),
-             color = "dodgerblue3", linetype = "dashed", size = 0.5) +
+             color = "black", linetype = "dashed", size = 0.5) +
   geom_text(aes(0,.004, family = "courier", label = paste("median = ", median(unique_parent_count))), 
-            nudge_x = 150, color = "dodgerblue3", size = 4.5) +
+            nudge_x = 300, color = "black", size = 4.5) +
   labs(title = 'Distribution of Unique Parent Interactions',
        subtitle = 'binwidth of 50',
        x = 'Unique Parent category per Visitor')
@@ -324,57 +324,71 @@ user_items %>%
 
 #### How many unique visitors have interacted with each PartNumber? 
 
+The following summary stats distribution is potentially problematic. We have a very high dimensional dataset (more PartNumbers than users). So while each user appears to be interacting with quite a few PartNumbers as indicated by previous graphs, this graph shows that for any given PartNumber, there are typically only a handful of different visitors who have explored the exact same PartNumber. 
 ``` {r echo = TRUE}
-user_items %>%
+temp1 <- user_items %>%
   group_by(PartNumber) %>%
   distinct(VisitorId) %>% # only keep distinct visitors per Item.
   summarize(unique_users_count = n()) %>%
   with(summary(unique_users_count))
 
+temp1
+
 user_items %>%
   group_by(PartNumber) %>%
   distinct(VisitorId) %>% # only keep distinct visitors per Item.
   summarize(unique_users_count = n()) %>%
-  ggplot(aes(unique_users_count, y = ..density..)) + # modal value is around log(2) or 2 items.
-  geom_histogram(binwidth = 5, colour = "black", fill = "darkgrey") +
+  mutate(unique_users_count_max500 = ifelse(unique_users_count > 500, 500, unique_users_count)) %>%
+  ggplot(aes(unique_users_count_max500, y = ..density..)) + # modal value is around log(2) or 2 items.
+  geom_histogram(binwidth = 10, colour = "darkgray", fill = "orangered1") +
   # median vertical line.
   geom_vline(aes(xintercept = median(unique_users_count)),
-             color = "dodgerblue3", linetype = "dashed", size = 0.5) +
-  geom_text(aes(0,.1, family = "courier", label = paste("median = ", median(unique_users_count))), 
-            nudge_x = 50, color = "dodgerblue3", size = 4.5) +
+             color = "black", linetype = "dashed", size = 0.5) +
+  geom_text(aes(0,.04, family = "courier", label = paste("median = ", median(unique_users_count))), 
+            nudge_x = 60, color = "black", size = 4.5) +
   labs(title = 'Distribution of Unique Visitor Interactions for each PartNumber',
-       subtitle = 'binwidth of 5',
-       x = 'Unique Visitors per PartNumber')
+       subtitle = 'binwidth of 10',
+       x = 'Unique Visitors per PartNumber (upper limit coerced to 500)')
 ```
+
+Typically, on median, there are `r temp1[3]` unique visitors who've visited the same specific PartNumber, for the `r unique(user_items$PartNumber) %>% length()` PartNumber categories.
 
 #### How many unique visitors have interacted with each Parent Family? 
 
-Because Parent Family's are a broader generalization than PartNumbers, we'd 
-expect to have more interactions within Parent Family than at the very specific PartNumber level and the summary statistics and distributions reflect that. 
+Because Parent Family's are a broader generalization than PartNumbers, we expect to have more interactions within a single Parent Family by multiple users than at the very specific PartNumber level. The summary statistics and distributions provided below reflect that when the dimensionality of the items is rolled up from the granular PartNumber level to the more general Parent category, we get more users who have looked at the same item.  
 
 ``` {r echo = TRUE}
-user_items %>%
+temp2 <- user_items %>%
   group_by(Parent) %>%
   distinct(VisitorId) %>% # only keep distinct visitors per Item.
   summarize(unique_users_count = n()) %>%
   with(summary(unique_users_count))
 
+temp2
+
 user_items %>%
   group_by(Parent) %>%
   distinct(VisitorId) %>% # only keep distinct visitors per Item.
   summarize(unique_users_count = n()) %>%
-  ggplot(aes(unique_users_count, y = ..density..)) + 
-  geom_histogram(binwidth = 20, colour = "black", fill = "darkgrey") +
+  mutate(unique_users_count_max2000 = ifelse(unique_users_count > 2000, 2000, unique_users_count)) %>%
+  ggplot(aes(unique_users_count_max2000, y = ..density..)) + 
+  geom_histogram(binwidth = 50, colour = "darkgray", fill = "orchid") +
   # median vertical line.
   geom_vline(aes(xintercept = median(unique_users_count)),
-             color = "dodgerblue2", linetype = "dashed", size = 0.5) +
-  geom_text(aes(0, .02, family = "courier", label = paste("median = ", median(unique_users_count))),
-            nudge_x = 150, color = "dodgerblue3", size = 4.5) +
+             color = "black", linetype = "dashed", size = 0.5) +
+  geom_text(aes(0, .005, family = "courier", label = paste("median = ", median(unique_users_count))),
+            nudge_x = 300, color = "black", size = 4.5) +
   labs(title = 'Distribution of Unique Visitors for each Parent Family',
-       subtitle = 'binwidth of 20',
-       x = 'Unique Visitors per PartNumber')
+       subtitle = 'binwidth of 50',
+       x = 'Unique Visitors per PartNumber (upper limit coerced to 2000)')
 
 ```
+
+Typically, on median, there are `r temp2[3]` unique visitors who've visited the same Parent category, of the `r unique(user_items$Parent) %>% length()` Parent categories. 
+
+This is `r round(temp2[3] / temp1[3], 1)` times more unique visitors per item when looking at items from the Parent category perspective than at the most granular PartNumber perspective. Perhaps it may make more sense to model recommendations at the Parent level instead of at the PartNumber level, given these differences in how many unique users are looking at identical PartNumbers versus identical Parent categories. 
+
+However, we see a bit of a presence of fat tail. The max number of unique visitors per Parent category is `r temp2[6]`, which means that for at least 1 outlier parent category, `r round(temp2[6] / unique(user_items$Parent) %>% length(), 2) * 100`% of unique users have interacted with the same product. This could be a potential source of concern or area for further research in these data as collaborative filtering recommendations can be influenced by the most popular items when making new recommendations to users.
 
 #### How many PartNumbers fall into each Parent Family?
 
@@ -393,6 +407,16 @@ user_items %>%
 IF we roll PartNumbers up to the parent level, there may be a potential concern that the frequency of ratings per a Parent category may be a function of the diversity of PartNumbers that make up the Parent. If this is the case, we'd likely see a correlation pattern between the frequency of PartNumbers per Parent and the number of unique visitors per Parent. In other words, the most popular parents could just be the ones with the most PartNumbers in these data.
 
 That could be a potential source of concern or area for further research in these data as collaborative filtering recommendations can be influenced by the most popular items.
+
+``` {r echo = TRUE}
+
+user_items %>%
+  group_by(Parent) %>%
+  distinct(VisitorId) %>% # only keep distinct visitors per Item.
+  summarize(unique_users_count = n()) %>%
+  with(summary(unique_users_count))
+
+```
 
 #### What types of click Actions do the visitors take? 
 
@@ -427,6 +451,15 @@ user_items %>%
 #### (TO EXPLORE) What percent of the time is selecting a part a precursor to adding to cart?
 
 If most of the clicks in the dataset reflect that generally, these ultimately lead to adding items to cart, perhaps this is some evidence that customers tend to know what they want when they land on the website. They aren't just querying the site or app out of general interest. 
+
+### Collaborative Filtering Algorithms
+
+For collaborative filtering recommender systems, the recommendations are largely based on the ability to identify commonality either between
+
+* a) users who've rated similar items in a similar way which addresses a recommendation hypothesis of "who are my nearest neighbors and what do they like?". This is known as **user-based collaborative filtering**. It finds users who have similar interest in items as you and recommends new items based on what they may rate highly. 
+
+* b) We can also make recommendations by finding items that are similarly rated to the ones that a user has rated. This is known as **item-based collaborative filtering**. It addresses a recommendation hypothesis of "people who liked this also tend to like this." 
+
 
 ### Creating a Ratings Method
 
