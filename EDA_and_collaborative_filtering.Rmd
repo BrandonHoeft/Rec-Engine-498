@@ -813,12 +813,12 @@ For now, we'll primarily need to convert our sparse matrix, **sparse_r** into a 
 real_r <- as(sparse_r, "realRatingMatrix")
 real_r
 
-
+real_r_non_missing_percent <- round(sum(rowCounts(real_r)) / (nrow(real_r) * ncol(real_r)), 5) * 100
 # str(real_r)
 # attributes(real_r)
 ```
 
-With `r nrow(real_r) * ncol(real_r)` total cells in this realRatingMatrix, and only `r sum(rowCounts(real_r))` total ratings within these cells, the percent of non-missing entries in our matrix is `r round(sum(rowCounts(real_r)) / (nrow(real_r) * ncol(real_r)), 5) * 100`%. Therefore, the sparsity of the matrix is `r 100 - round(sum(rowCounts(real_r)) / (nrow(real_r) * ncol(real_r)), 5) * 100`%. 
+With `r nrow(real_r) * ncol(real_r)` total cells in this realRatingMatrix, and only `r sum(rowCounts(real_r))` total ratings within these cells, the percent of non-missing entries in our matrix is `r real_r_non_missing_percent`%. Therefore, the sparsity of the matrix is `r 100 - real_r_non_missing_percent`%. 
 
 A preview of what this realRatingMatrix looks like for a handful of random rows (users) and columns (items). We see no ratings for this small slice of the matrix. 
 
@@ -841,13 +841,36 @@ Based on the EDA, we'll use 1st quartile (25th percentile) values as cutoffs for
 
 * **Item threshold**: The item has to have had at least `r different_visitors_per_parent_summary[2]` different users who have interacted with that item (Parent). This reflects the 25th percentile of the number of different visitors per parent category. 
 
-We can simply use matrix subsetting to filter our realRatingMatrix to drop out the 25% most sparse row and column entries.
+We can simply use matrix subsetting using the rowCounts() and colCounts() functions within recommenderLab to apply these rules for sparsity reduction and ensuring that each user has enough test items available for learning the model and evaluating predicted top N items. Let's look at how many users were dropped as a result of this. 
 
 ``` {r echo =TRUE}
-
+real_r_filtered <- real_r[rowCounts(real_r) >= different_parent_per_user_summary[2], ] # thirty
+nrow(real_r_filtered) - nrow(real_r)
+summary(rowCounts(real_r_filtered))
 
 ```
+  
+As a result of this, we have `r nrow(real_r_filtered) - nrow(real_r)` fewer users in the matrix. 
+  
+Now also apply the subsetting rules for items.
 
+``` {r echo = TRUE}
+real_r_filtered <- real_r_filtered[, colCounts(real_r_filtered) >= different_visitors_per_parent_summary[2],] # eighteen
+
+summary(colCounts(real_r_filtered))
+
+```
+  
+As a result of this, we have `r ncol(real_r_filtered) - ncol(real_r)` fewer items in the dataset. The new dimensions of the updated realRatingMatrix are:
+
+``` {r}
+real_r_filtered_non_missing_percent <- round(sum(rowCounts(real_r_filtered)) / (nrow(real_r_filtered) * ncol(real_r_filtered)), 5) * 100
+
+real_r_filtered
+class(real_r_filtered)
+```
+
+With `r nrow(real_r_filtered) * ncol(real_r_filtered)` total cells in this realRatingMatrix, and `r sum(rowCounts(real_r_filtered))` total ratings within these cells, the percent of non-missing entries in our reduced matrix is `r real_r_filtered_non_missing_percent`%. We improved our non-missing entries by about `r round((real_r_filtered_non_missing_percent - real_r_non_missing_percent) / real_r_non_missing_percent, 2) * 100`%, although our missingness is still very high. 
 
 Now that we have a realRatingMatrix object, we can focus on identifying what algorithms we want to explore for collaborative filtering. To start, we'll focus on tuning 2 popular collaborative filtering algorithms, **UBCF_realRatingMatrix** and **IBCF_realRatingMatrix**. Brief descriptions of these algorithms and their default tuning parameters are illustrated below. 
 
@@ -862,6 +885,30 @@ recommenderRegistry$get_entries(dataType = "realRatingMatrix")$IBCF_realRatingMa
 
 ## User Based Collaborative Filtering
 
+Here, we'll train 5 different user-based collaborative filtering models, each with a different set of parameters. The model will be evaluated based on the classification accuracy (ex. True Positive Rate, False Positive Rate) for different top-N recommended items in the test set. Instead of a simple training and test sample, we'll use 5-fold cross-validation. This will enable all of the user rows to contribute towards model testing in one of its folds. In other words, all `r nrow(real_r_filtered)` user vectors of ratings will contribute towards the model test performance during 1 of 5 train/test iterations. This takes about 2 minutes to run on these data.
+
+``` {r echo = TRUE}
+set.seed(2017)
+ubcf_scheme <- evaluationScheme(real_r_filtered,
+                                method = "cross-validation",
+                                k = 5,
+                                given = 10,  # how many records for a test user will learn the model? Remainder used for evaluating predictions. 
+                                goodRating = 3) # threshold for classification. Median Total_rating_max10.
+
+
+#s3save(ubcf_scheme, bucket = "pred498team5", object = "ubcf_scheme.Rdata")
+#s3load("user_items.Rdata", bucket = "pred498team5")
+
+ubcf_scheme
+```
+
+Next, we need to specify the different UBCF algorithms with specified hyper-parameters we want to try out.
+
+``` {r echo = TRUE}
+ubcf_algorithms <- list(
+  
+)
+```
 
 with the evaluationScheme(), which 
 
