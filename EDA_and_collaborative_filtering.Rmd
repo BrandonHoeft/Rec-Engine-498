@@ -44,8 +44,8 @@ To read the Part items data and the user webactivity data from s3 I passed read_
 # specify personal account keys as environment variables so I can read my s3 object(s) from AWS. 
 
 # DO NOT DO NOT DO NOT DO NOT DO NOT SAVE KEY in code or render in output!!!! Could compromise AWS account. 
-Sys.setenv("AWS_ACCESS_KEY_ID" = "",
-           "AWS_SECRET_ACCESS_KEY" = "")
+#Sys.setenv("AWS_ACCESS_KEY_ID" = "",
+#           "AWS_SECRET_ACCESS_KEY" = "")
 
 ```
 
@@ -888,7 +888,7 @@ With `r nrow(real_r_filtered) * ncol(real_r_filtered)` total cells in this realR
 
 Here, we'll train 5 different user-based collaborative filtering models, each with a different set of parameters. The model will be evaluated based on the classification accuracy (ex. True Positive Rate, False Positive Rate) for different top-N recommended items in the test set. Instead of a simple training and test sample, we'll use 5-fold cross-validation. This will enable all of the user rows to contribute towards model testing in one of its folds. In other words, all `r nrow(real_r_filtered)` user vectors of ratings will contribute towards the model test performance during 1 of 5 train/test iterations. This takes about 2 minutes to run on these data.
 
-``` {r echo = TRUE}
+``` {r eval = FALSE, echo = TRUE}
 set.seed(2017)
 ubcf_scheme <- evaluationScheme(real_r_filtered,
                                 method = "cross-validation",
@@ -958,7 +958,7 @@ ubcf_algorithms <- list(
 
 Time to fit the recommender models. The type of model will be a "TopNList" recommender system instead of a "rating" based recommender system. This will allow us to evaluate models on the test data in a classification framework.
 
-``` {r echo = TRUE}
+``` {r eval = FALSE, echo = TRUE}
 ubcf_results <- evaluate(ubcf_scheme, 
                          ubcf_algorithms, 
                          type = "topNList", 

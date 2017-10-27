@@ -2,13 +2,13 @@
 -   [Getting the data into R](#getting-the-data-into-r)
 -   [Initial Data Wrangling](#initial-data-wrangling)
 -   [Descriptions of the User & Items Data](#descriptions-of-the-user-items-data)
-    -   [Weekly Users and Total Clicks](#weekly-users-and-total-clicks)
+    -   [Weekly Web log Activity](#weekly-web-log-activity)
     -   [Description of Unique Visitors, PartNumbers, Parents](#description-of-unique-visitors-partnumbers-parents)
     -   [How do total Action Counts of each visitor distribute?](#how-do-total-action-counts-of-each-visitor-distribute)
-    -   [How many unique PartNumbers is each visitor interacting with?](#how-many-unique-partnumbers-is-each-visitor-interacting-with)
-    -   [How many unique Parents are visitors interacting with?](#how-many-unique-parents-are-visitors-interacting-with)
-    -   [How many unique visitors have interacted with each PartNumber?](#how-many-unique-visitors-have-interacted-with-each-partnumber)
-    -   [How many unique visitors have interacted with each Parent Family?](#how-many-unique-visitors-have-interacted-with-each-parent-family)
+    -   [How many different PartNumbers is each visitor interacting with?](#how-many-different-partnumbers-is-each-visitor-interacting-with)
+    -   [How many different Parents are visitors interacting with?](#how-many-different-parents-are-visitors-interacting-with)
+    -   [How many Different Visitors have interacted with each PartNumber?](#how-many-different-visitors-have-interacted-with-each-partnumber)
+    -   [How many Different Visitors have interacted with each Parent Family?](#how-many-different-visitors-have-interacted-with-each-parent-family)
         -   [Impact of Long Tail Distributions](#impact-of-long-tail-distributions)
     -   [How many PartNumbers fall into each Parent Family?](#how-many-partnumbers-fall-into-each-parent-family)
     -   [Do Parents with more PartNumbers also have more Visitors?](#do-parents-with-more-partnumbers-also-have-more-visitors)
@@ -17,10 +17,17 @@
 -   [More Data Wrangling: Creating Ratings](#more-data-wrangling-creating-ratings)
     -   [Convert Actions to Implicit Ratings](#convert-actions-to-implicit-ratings)
     -   [Creating a weighted Total Rating per item](#creating-a-weighted-total-rating-per-item)
-    -   [Different Scale Transformations for Total\_ratings](#different-scale-transformations-for-total_ratings)
+    -   [Selecting an Appropriate Scale Transformation for Total\_rating.](#selecting-an-appropriate-scale-transformation-for-total_rating.)
     -   [Setting up a User Ratings Matrix](#setting-up-a-user-ratings-matrix)
 -   [Collaborative Filtering Algorithms](#collaborative-filtering-algorithms)
+-   [recommenderlab](#recommenderlab)
+-   [Improving the Sparsity Problem](#improving-the-sparsity-problem)
 -   [User Based Collaborative Filtering](#user-based-collaborative-filtering)
+    -   [How the UBCF algorithm works](#how-the-ubcf-algorithm-works)
+    -   [Create a train and test modeling scheme](#create-a-train-and-test-modeling-scheme)
+    -   [Tuning Parameters for UBCF](#tuning-parameters-for-ubcf)
+    -   [Create list of UBCF Models](#create-list-of-ubcf-models)
+    -   [Run the UBCF Models](#run-the-ubcf-models)
 -   [Item Based Collaborative Filtering](#item-based-collaborative-filtering)
 
 Introduction
@@ -118,10 +125,10 @@ user_items <- users %>%
 Check that the left join preserved all of the original data in our full users dataset after joining in the Parent value associated with each PartNumber searched by users.
 
 ``` r
-all.equal(users[1:5], user_items[1:5])
+all.equal(users[1:3], user_items[1:3])
 ```
 
-    [1] "Incompatible type for column `ActionDate`: x character, y numeric"
+    [1] TRUE
 
 Our original datasets are taking up a lot of memory. Specifically, all other datasets other than user\_items are currently taking up 7.382793610^{8}MB of RAM. We'll remove them since everything we need in terms of user click data, the PartNumbers, Parent, actions taken, and the action date are all in the user\_items dataset. Our main user\_items dataset is quite large, requiring 4.165096310^{8} MB of RAM.
 
@@ -158,19 +165,22 @@ With a baseline dataset and description of the different variables provided abov
 
 Again, the web activity covered by these user clicks on the website begins on 2017-01-31 and goes through 2017-09-08, covering a span of 220 days.
 
-### Weekly Users and Total Clicks
+### Weekly Web log Activity
+
+For the 23997 unique VisitorIDs in this random sample of user data, it is good to know how these users interacted on the website over time in terms of total clicks, the number of different PartNumbers that are interacted with, and he number of different Parent categories interacted with over fixed intervals of time.
+
+The line chart shows that engagement in terms of clicks, PartNumbers, Parent categories over time is generally pretty consistent week to week. There are som exceptions. For instance in the week ending 5-14-17, there were only 4 total clicks recorded for 4 different PartNumbers of 4 different Parent categories, which is highly anomalous. Additionally, the week ending July 2, 2017 also saw a noticeable spike in click activity and user interaction with different PartNumbers and Parent categories. This may be because users were planning to be off the following week since 4th of July fell on the following Tuesday.
+
+Summary statistics are provided after the chart for each of the three different measures.
 
 ``` r
 weekly_activity <- user_items %>%
   mutate(week_ending_date = ceiling_date(ActionDate, "week")) %>%
   group_by(week_ending_date) %>%
-  summarize(unique_users = length(unique(VisitorId)),
-            total_clicks = n()) %>%
+  summarize(PartNumbers_count = length(unique(PartNumber)), # number of different Partnumbers interacted with.
+            Parent_category_count = length(unique(Parent)), # number of different Parents interacted with.
+            total_clicks = sum(ActionCount)) %>%
   arrange(week_ending_date)
-
-temp <- weekly_activity %>%
-  mutate(week_ending_date = as.Date(week_ending_date, "%Y-%m-%d")) 
-
 
 weekly_activity %>%
   mutate(week_ending_date = as.Date(week_ending_date, "%Y-%m-%d")) %>% 
@@ -179,49 +189,72 @@ weekly_activity %>%
     geom_line(aes(color = key)) +
     scale_x_date(date_breaks = ("1 month"),
                date_labels = c(month.name[1:9])) +
-    scale_y_continuous(labels = function(n) format(n, scientific = FALSE)) + # raw frequency scale
-    labs(title = "Weekly Distribution of Sample of Users and their total click Actions",
+    scale_y_sqrt(breaks = c(1, 50, 2500, 25000, 75000, 200000, 400000, 600000, 800000),
+                 labels = function(n) format(n, scientific = FALSE)) + # raw frequency scale
+    labs(title = "Web log Activity by Users Over Time",
+         subtitle = "broken down weekly",
          x = "2017",
          y = "Count") 
 ```
 
 ![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-9-1.png)
 
-Generally, the number of unique users each week in this dataset distributes as indicated below. There was one particularly unusual week around May 14, where there was almost no user or click activity noted, as indicated by the graph above.
+The number of clicks by this sample of users distributed week over week as indicated by the table below. There was one particularly unusual week around May 14, as previously highlighted.
 
 ``` r
 library(knitr)
 weekly_activity %>%
-  summarize(First_Quartile = quantile(unique_users, .25),
-            median = median(unique_users),
-            mean = mean(unique_users),
-            Third_Quartile = quantile(unique_users, .75),
-            Std_Deviation = sd(unique_users)
-            ) %>%
-  kable(caption = 'Typical Count of Unique Users by Week', align = 'c')
-```
-
-| First\_Quartile | median |   mean   | Third\_Quartile | Std\_Deviation |
-|:---------------:|:------:|:--------:|:---------------:|:--------------:|
-|     13347.75    |  14486 | 13853.88 |     15679.5     |    4092.181    |
-
-The number of clicks by these unique users generally distributes as indicated by the table below. There was one particularly unusual week around May 14, where there was almost no user or click activity noted, as indicated by the graph above.
-
-``` r
-library(knitr)
-weekly_activity %>%
-  summarize(First_Quartile = quantile(total_clicks, .25),
+  summarize(minimum = min(total_clicks),
+            First_Quartile = quantile(total_clicks, .25),
             median = median(total_clicks),
             mean = mean(total_clicks),
             Third_Quartile = quantile(total_clicks, .75),
-            Std_Deviation = sd(total_clicks)
-            ) %>%
+            maximum = max(total_clicks),
+            Std_Deviation = sd(total_clicks)) %>%
   kable(caption = 'Typical Count of total clicks by Week', align = 'c')
 ```
 
-| First\_Quartile | median |   mean   | Third\_Quartile | Std\_Deviation |
-|:---------------:|:------:|:--------:|:---------------:|:--------------:|
-|     204798.2    | 287278 | 279252.3 |     361214.5    |     123685     |
+| minimum | First\_Quartile |  median  |   mean   | Third\_Quartile | maximum | Std\_Deviation |
+|:-------:|:---------------:|:--------:|:--------:|:---------------:|:-------:|:--------------:|
+|    4    |     226859.8    | 328000.5 | 319974.5 |      417719     |  749686 |    146093.5    |
+
+The number of different PartNumbers interacted with each week by users in this dataset distributes as indicated by the following summary statistics.
+
+``` r
+library(knitr)
+weekly_activity %>%
+  summarize(minimum = min(PartNumbers_count),
+            First_Quartile = quantile(PartNumbers_count, .25),
+            median = median(PartNumbers_count),
+            mean = mean(PartNumbers_count),
+            Third_Quartile = quantile(PartNumbers_count, .75),
+            maximum = max(PartNumbers_count),
+            Std_Deviation = sd(PartNumbers_count)) %>%
+  kable(caption = 'PartNumbers interacted with by Users each Week', align = 'c')
+```
+
+| minimum | First\_Quartile | median |   mean   | Third\_Quartile | maximum | Std\_Deviation |
+|:-------:|:---------------:|:------:|:--------:|:---------------:|:-------:|:--------------:|
+|    4    |      72809      |  91684 | 86192.44 |     104696.5    |  147107 |    29174.49    |
+
+The number of different Parent categories interacted with each week in this dataset distributes as indicated by the following summary statistics.
+
+``` r
+library(knitr)
+weekly_activity %>%
+  summarize(minimum = min(Parent_category_count),
+            First_Quartile = quantile(Parent_category_count, .25),
+            median = median(Parent_category_count),
+            mean = mean(Parent_category_count),
+            Third_Quartile = quantile(Parent_category_count, .75),
+            maximum = max(Parent_category_count),
+            Std_Deviation = sd(Parent_category_count)) %>%
+  kable(caption = 'Parent categories interacted with by Users each Week', align = 'c')
+```
+
+| minimum | First\_Quartile |  median |   mean   | Third\_Quartile | maximum | Std\_Deviation |
+|:-------:|:---------------:|:-------:|:--------:|:---------------:|:-------:|:--------------:|
+|    4    |     15362.25    | 17020.5 | 15841.53 |     17907.5     |  20024  |    4276.496    |
 
 ### Description of Unique Visitors, PartNumbers, Parents
 
@@ -262,14 +295,14 @@ user_items %>%
        x = "Total Actions per Visitor")
 ```
 
-![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-13-1.png)
+![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-14-1.png)
 
        Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
         1.0    99.0   263.0   426.7   559.0 10176.0 
 
 After careful consideration, we have determined that total actions per PartNumber or per Parent within a single user session should not influence the implicit rating derived for the recommender. This could be for a variety of reasons, but primarily because there's not a strong theoretical basis that repeating an action in a single session with an item is an endorsement of that item. For example, selecting a part multiple times in the same session may perhaps be just as indicative of uncertainty or confusion as it could be of an interest in the item.
 
-### How many unique PartNumbers is each visitor interacting with?
+### How many different PartNumbers is each visitor interacting with?
 
 ``` r
 user_items %>%
@@ -283,17 +316,17 @@ user_items %>%
              color = "black", linetype = "dashed", size = 0.5) +
   geom_text(aes(0,.002, family = "courier", label = paste("median = ", median(unique_part_count))), 
             nudge_x = 600, color = "black", size = 4.5) +
-  labs(title = 'Distribution of how many PartNumbers each Visitor interacted with',
+  labs(title = 'How many PartNumbers each Visitor interacted with',
        subtitle = 'binwidth of 100',
-       x = 'Unique PartNumbers per Visitor')
+       x = 'Different PartNumbers per Visitor')
 ```
 
-![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-15-1.png)
+![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-16-1.png)
 
        Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
         1.0    43.0   109.0   169.7   226.0  3847.0 
 
-### How many unique Parents are visitors interacting with?
+### How many different Parents are visitors interacting with?
 
 Instead of looking at the distinct PartNumbers that each visitor interacts with, we can also look at the Parent category that each PartNumber rolls up to. By reducing the diversity of different products from the specific PartNumber to the Parent category they roll up to, we'd expect the count of interactions with unique Parents to decrease. However, this may improve the sparsity problem of a recommender system.
 
@@ -309,17 +342,17 @@ user_items %>%
              color = "black", linetype = "dashed", size = 0.5) +
   geom_text(aes(0,.004, family = "courier", label = paste("median = ", median(unique_parent_count))), 
             nudge_x = 300, color = "black", size = 4.5) +
-  labs(title = 'Distribution of how many Parent categories each Visitor interacted with',
+  labs(title = 'How many Parent categories each Visitor interacted with',
        subtitle = 'binwidth of 50',
-       x = 'Unique Parent category per Visitor')
+       x = 'Parent categories per Visitor')
 ```
 
-![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-17-1.png)
+![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-18-1.png)
 
        Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
         1.0    30.0    74.0   105.9   146.0  1798.0 
 
-### How many unique visitors have interacted with each PartNumber?
+### How many Different Visitors have interacted with each PartNumber?
 
 The following summary stats distribution is potentially problematic. We have a very high dimensional dataset (more PartNumbers than users). So while each user appears to be interacting with quite a few PartNumbers as indicated by previous graphs, this graph shows that for any given PartNumber, there are typically only a handful of different visitors who have explored the exact same PartNumber.
 
@@ -336,19 +369,19 @@ user_items %>%
              color = "black", linetype = "dashed", size = 0.5) +
   geom_text(aes(0,.04, family = "courier", label = paste("median = ", median(unique_users_count))), 
             nudge_x = 60, color = "black", size = 4.5) +
-  labs(title = 'Distribution of Unique Visitors for each PartNumber',
+  labs(title = 'Distribution of Number of Different Visitors going each PartNumber',
        subtitle = 'binwidth of 10',
-       x = 'Unique Visitors per PartNumber (upper limit coerced to 500)')
+       x = 'Different Visitors per PartNumber (upper limit coerced to 500)')
 ```
 
-![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-19-1.png)
+![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-20-1.png)
 
        Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
        1.00    2.00    5.00   11.06   11.00 1893.00 
 
-Typically, on median, there are 5 unique visitors who've visited the same specific PartNumber, for the 368374 PartNumber categories.
+Typically, on median, there are 5 different visitors who've visited the same PartNumber, for the 368374 PartNumber categories.
 
-### How many unique visitors have interacted with each Parent Family?
+### How many Different Visitors have interacted with each Parent Family?
 
 Because Parent Family's are a broader generalization than PartNumbers, we expect to have more interactions within a single Parent Family by multiple users than at the very specific PartNumber level. The summary statistics and distributions provided below reflect that when the dimensionality of the items is rolled up from the granular PartNumber level to the more general Parent category, we get more users who have looked at the same item.
 
@@ -365,21 +398,21 @@ user_items %>%
              color = "black", linetype = "dashed", size = 0.5) +
   geom_text(aes(0, .005, family = "courier", label = paste("median = ", median(unique_users_count))),
             nudge_x = 300, color = "black", size = 4.5) +
-  labs(title = 'Distribution of Unique Visitors for each Parent Family',
+  labs(title = 'Distribution of Number of Different Visitors for each Parent Family',
        subtitle = 'binwidth of 50',
-       x = 'Unique Visitors per PartNumber (upper limit coerced to 2000)')
+       x = 'Different Visitors per Parent (upper limit coerced to 2000)')
 ```
 
-![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-21-1.png)
+![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-22-1.png)
 
        Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
        1.00   18.00   41.00  105.62   99.75 7063.00 
 
-Typically, on median, there are 41 unique visitors who've visited the same Parent category, of the 24058 Parent categories.
+Typically, on median, there are 41 different visitors who've visited the same Parent category, of the 24058 Parent categories.
 
-This is 8.2 times more unique visitors per item when looking at items from the Parent category perspective than at the most granular PartNumber perspective. Perhaps it may make more sense to model recommendations at the Parent level instead of at the PartNumber level, given these differences in how many unique users are looking at identical PartNumbers versus identical Parent categories.
+This represents 8.2 times more different visitors per Parent than per PartNumber. Perhaps it may make more sense to model recommendations at the Parent level instead of at the PartNumber level, given these differences in how many unique users are looking at identical PartNumbers versus identical Parent categories.
 
-However, we see a bit of a presence of fat tail. The max number of unique visitors per Parent category is 7063, which means that for at least 1 outlier parent category, 29% of unique users have interacted with the same product. This is very important in the collaborative filtering setting.
+However, we see a bit of a presence of fat tail. The max number of different visitors per Parent category is 7063, which means that for at least 1 outlier parent category, 29% of different users have interacted with the same parent category. This is important to know in the collaborative filtering setting, as popular items have the potential to heavily influence identification of similar users and items, which can bias new recommendations towards more popular items.
 
 #### Impact of Long Tail Distributions
 
@@ -408,7 +441,7 @@ user_items %>%
 
 When we roll PartNumbers up to the parent level, the number of different users who interact with a Parent category may be a function of the tally of different PartNumbers that inheret from the Parent. If this is the case, we'd likely see a correlation between the frequency of PartNumbers per Parent and the number of unique visitors per Parent. Collaborative filtering methods are notorious for being biased by the the most popularly rated items, as those ratings will be a large influence in measuring inter-user similarity (user-based collaborative filtering) or inter-item similarity (item-based collaborative filtering).
 
-![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-24-1.png)
+![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-25-1.png)
 
 However, this may be a necessary trade-off for these types of recommender systems as the more items in common that any pair of users have rated, the more robust the measures of similarity are, from which new recommendations can be made for items. For these algorithms to work well, it is important to adequately measure similar users or items, which is already difficult with very sparse matrices filled with primarily missing entries.
 
@@ -423,7 +456,7 @@ user_items %>%
   summarize(frequency = n()) %>%
   ggplot(aes(x = reorder(ActionId_label, desc(frequency)), y = frequency / sum(frequency))) +
     geom_bar(aes(fill = ActionId_label), stat = "identity") +
-    labs(title = "Distribution of click Actions taken by Users",
+    labs(title = "Click Actions taken by Users",
          subtitle = "on company website",
          x = NULL,
          y = "Percent") +
@@ -436,7 +469,7 @@ user_items %>%
     scale_y_continuous(labels=scales::percent)
 ```
 
-![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-25-1.png)
+![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-26-1.png)
 
 |  ActionId| ActionId\_label          |  frequency|  proportion|
 |---------:|:-------------------------|----------:|-----------:|
@@ -480,7 +513,7 @@ user_items %>%
   summarize(frequency = n()) %>%
   ggplot(aes(x = action_rating, y = frequency / sum(frequency))) +
     geom_bar(aes(fill = desc(action_rating)), stat = "identity") +
-    labs(title = "Distribution of Implicit Action Ratings taken by Users",
+    labs(title = "Implicit Action Ratings taken by Users",
          subtitle = "on company website",
          x = NULL,
          y = "Percent",
@@ -492,7 +525,7 @@ user_items %>%
     scale_y_continuous(labels=scales::percent)
 ```
 
-![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-27-1.png)
+![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-28-1.png)
 
 |  ActionId| ActionId\_label          |  action\_rating|  frequency|  proportion|
 |---------:|:-------------------------|---------------:|----------:|-----------:|
@@ -593,9 +626,9 @@ user_ratings <- user_items %>%
   arrange(VisitorId, total_rating)
 ```
 
-### Different Scale Transformations for Total\_ratings
+### Selecting an Appropriate Scale Transformation for Total\_rating.
 
-I came up with 3 initial different ways to transform the total\_rating per Parent category for every user to tighten the distribution of total\_ratings. The 3 other transformations are a lognormal transformation, square root transformation, and coercing the upper limit to a max value of 10.
+Came up with 3 initial different ways to transform the total\_rating per item (the Parent category) in order to handle the large outliers in the raw total\_rating distribution. The 3 other transformations are a lognormal transformation, square root transformation, and coercing the upper limit to a max value of 10. These are visualized below alongside the original total\_rating.
 
 ``` r
 tidy_ratings <- user_ratings %>%
@@ -613,11 +646,13 @@ tidy_ratings %>%
   scale_y_continuous(labels = function(n) format(n, scientific = FALSE)) # raw frequency scale
 ```
 
-![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-35-1.png)
+![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-36-1.png)
 
 ``` r
 remove(tidy_ratings)
 ```
+
+Below are the standard summary stats below for each of the 4 different ratings methods.
 
       total_rating     total_rating_sqrt total_rating_logn total_rating_max10
      Min.   :  1.000   Min.   : 1.000    Min.   :0.000     Min.   : 1.000    
@@ -627,39 +662,57 @@ remove(tidy_ratings)
      3rd Qu.:  6.000   3rd Qu.: 2.449    3rd Qu.:1.792     3rd Qu.: 6.000    
      Max.   :818.000   Max.   :28.601    Max.   :6.707     Max.   :10.000    
 
-We can also look at the standard deviation for each of the 4 different total\_ratings too. Naturally, the raw total\_ratings will have the largest standardized variance b/c of its extreme right-skew. When applying a sqrt() or log() transformation, the total\_ratings preserve their rank order but we also see that the scores are much more scrunched together in the middle 50% range of values, or interquartile range (IQR), also reflected by their low standard deviation. The last option I tried was using a coercion method, such as capping the upper limit at a max total\_rating of 10. Doing so seems to balance keeping the scores in a reasonable range while allowing for variance between each Parent rating by each visitor, especially in the IQR. Total\_rating\_max10 will be what I use for these models going forward.
+When applying a sqrt() or log() transformation, the total\_ratings preserve their rank order but we also get the effect that the original total\_ratings that were not outliers originally become much closer to each other. We can see this effect by observing the middle 50% range of values, or interquartile range (IQR), in the output below. There's a much tighter range of values for the scale transformed ratings (square-root and lognormal), whereas simply coercing the outliers to an upper boundary like total\_rating\_max10, still preserves the variance in the middle 50% range of ratings values as the original, but highly skewed total\_rating.
+
+    # A tibble: 1 x 4
+      total_rating total_rating_sqrt total_rating_logn total_rating_max10
+             <dbl>             <dbl>             <dbl>              <dbl>
+    1            3         0.7174389         0.6931472                  3
+
+We can also look at the standard deviation for each of the 4 different total\_ratings too. Naturally, the raw total\_ratings will have the largest standardized variance b/c of its extreme right-skew. The standard variance of each total rating reflects the same insights from the IQR values. Total\_rating\_max10 seems to balance keeping the scores in a reasonable range and handling outliers while still preserving a lot of the variance between any item rating.
+
+Total\_rating\_max10 will be what I use initially to explore collaborative filtering.
 
 ``` r
-library(purrr)
-map_dbl(user_ratings[3:6], sd) # get the standard deviation for each total_rating type.
+map_dfr(user_ratings[3:6], sd) # get the standard deviation for each total tating method
 ```
 
-          total_rating  total_rating_sqrt  total_rating_logn 
-             6.8333019          0.8988195          0.7360477 
-    total_rating_max10 
-             2.5783076 
+    # A tibble: 1 x 4
+      total_rating total_rating_sqrt total_rating_logn total_rating_max10
+             <dbl>             <dbl>             <dbl>              <dbl>
+    1     6.833302         0.8988195         0.7360477           2.578308
 
 ### Setting up a User Ratings Matrix
 
-We're at the point now where we have a dataset where each row represents the total\_rating of a specific item (Parent) made by a specific VisitorID.
+We're at the point now where we have a dataset where each row represents the total\_rating of a specific item (Parent) made by a specific VisitorID. A reminder of what these primary columns of interest look like in our current dataset:
 
 ``` r
-sample_n(user_ratings[,1:3], 10) %>%
+sample_n(user_ratings[,c(1:2, 6)], 20) %>%
   kable(align = 'c')
 ```
 
-|   VisitorId   |   Parent   | total\_rating |
-|:-------------:|:----------:|:-------------:|
-|  647027980726 | P66-304060 |       3       |
-| 1408747058923 | O65-465939 |       9       |
-|  621451876059 | O67-464364 |       6       |
-|  733740261545 | O66-493394 |       12      |
-| 1124236964536 | P65-306717 |       3       |
-|  612948177427 | M78-409515 |       2       |
-|  726734131242 | O67-478224 |       2       |
-|  803856000258 | M67-409095 |       1       |
-| 8156451706107 | O66-465104 |       3       |
-| 1333648509124 | N66-542027 |       3       |
+|   VisitorId   |   Parent   | total\_rating\_max10 |
+|:-------------:|:----------:|:--------------------:|
+|  928537262828 | N66-538677 |           3          |
+| 1032852849147 | P65-308768 |           6          |
+| 2013950409875 | M65-405045 |           3          |
+|  705341265478 | O66-462884 |           1          |
+|  511354495870 | P65-307290 |           2          |
+| 7614682555550 | M66-385325 |           3          |
+| 3648578508401 | P65-307503 |           1          |
+|  910626375212 | P65-308185 |           6          |
+| 1033238655280 | M65-382725 |           3          |
+| 1210433977208 | O65-465304 |           3          |
+|   204352030   | P65-301674 |           3          |
+| 1119327234954 | M65-411945 |           3          |
+| 1230535169603 | P67-300910 |           3          |
+|  607859460539 | P65-308268 |           2          |
+| 7059292683292 | P65-306141 |           3          |
+|  718032364592 | P65-306141 |           4          |
+| 8388300092634 | P65-306802 |           3          |
+| 2074947530252 | P65-304445 |          10          |
+| 2698620709804 | P66-302520 |           3          |
+|   676622040   | M65-388675 |           6          |
 
 These 3 components are all that is needed to craete a user-items rating matrix. The rows of the matrix will represent individual users, columns will represent the distinct Parent categories, and the elements in the matrix will represent the respective total\_rating of the item.
 
@@ -716,8 +769,239 @@ For collaborative filtering recommender systems, the recommendations are largely
 
 -   1.  We can also make recommendations by finding items that are similarly rated to the ones that a user has rated. In this case, neighborhoods are defined not by similar users but by items with similar ratings pattern across users. These item similarity measures are then compared to the items the user has already rated. This is known as **item-based collaborative filtering**. It addresses a recommendation hypothesis of "people who liked this also tend to like this" or "What items are most similar to the ones that I’ve purchased that may interest me?"
 
+recommenderlab
+--------------
+
+Since we'll be working initially with action ratings, and not binary ratings (1,0), we'll use the `realRatingMatrix` class of objects from `recommenderlab`. Some of the methods we can apply to objects of this class are output below.
+
+``` r
+library(recommenderlab)
+methods(class = "realRatingMatrix")
+```
+
+     [1] binarize               calcPredictionAccuracy coerce                
+     [4] colCounts              colMeans               colSds                
+     [7] colSums                denormalize            dimnames<-            
+    [10] dimnames               dim                    dissimilarity         
+    [13] evaluationScheme       getData.frame          getList               
+    [16] getNormalize           getRatingMatrix        getRatings            
+    [19] getTopNLists           image                  normalize             
+    [22] nratings               [                      [<-                   
+    [25] Recommender            removeKnownRatings     rowCounts             
+    [28] rowMeans               rowSds                 rowSums               
+    [31] sample                 show                   similarity            
+    see '?methods' for accessing help and source code
+
+For now, we'll primarily need to convert our sparse matrix, **sparse\_r** into a realRatingMatrix object, which is a pre-processing step for building recommender systems with this package.
+
+``` r
+# coerce our sparseMatrix, sparse_r into a realRatingMatrix object
+real_r <- as(sparse_r, "realRatingMatrix")
+real_r
+```
+
+    23997 x 24058 rating matrix of class 'realRatingMatrix' with 2540936 ratings.
+
+``` r
+real_r_non_missing_percent <- round(sum(rowCounts(real_r)) / (nrow(real_r) * ncol(real_r)), 5) * 100
+# str(real_r)
+# attributes(real_r)
+```
+
+With 577319826 total cells in this realRatingMatrix, and only 2540936 total ratings within these cells, the percent of non-missing entries in our matrix is 0.44%. Therefore, the sparsity of the matrix is 99.56%.
+
+A preview of what this realRatingMatrix looks like for a handful of random rows (users) and columns (items). We see no ratings for this small slice of the matrix.
+
+``` r
+getRatingMatrix(real_r[1:10, 1:5])
+```
+
+    10 x 5 sparse Matrix of class "dgCMatrix"
+                  M65-362355 M65-362375 M65-362385 M65-362395 M65-362415
+    1000261260099          .          .          .          .          .
+    1000341118872          .          .          .          .          .
+    1000368642442          .          .          .          .          .
+    1000434402046          .          .          .          .          .
+    1000434405330          .          .          .          .          .
+    1000435257028          .          .          .          .          .
+    1000449622460          .          .          .          .          .
+    1000451189489          .          .          .          .          .
+    1000469601687          .          .          .          .          .
+    1000536917542          .          .          .          .          .
+
+Improving the Sparsity Problem
+------------------------------
+
+Some users and items in this dataset are primary culprits contributing the sparsity in our matrix, such as users who maybe only rated one item in the entire 7-month period of the dataset.
+
+From a practical perspective, it probably does not makes sense to keep users from this matrix who have close to 0 interactions with items.
+
+From a modeling perspective, it will be hard to learn from these sparse user vectors and almost impossible to use them as part of any holdout dataset because there will not be enough item ratings to both learn their similarity to other users or items from and also enough remaining item ratings to use for predicting test error. This is where some of our prior EDA will help us out. Specifically, the EDA plots and summary stats sections of this analysis that looked at the questions of "How many different Parents are visitors interacting with?" and "How many Different Visitors have interacted with each Parent Family?" will help us to subset the realRatingMatrix. This will enable us to arrive at a viable reference population for training and testing candidate collaborative filtering models.
+
+Based on the EDA, we'll use 1st quartile (25th percentile) values as cutoffs for getting into the realRatingMatrix for fitting and evaluating a model. Specifically:
+
+-   **User threshold**: The user has to have had at least 30 ratings of different items (Parents). This reflects the 25th percentile of user interactions with different Parent categories.
+
+-   **Item threshold**: The item has to have had at least 18 different users who have interacted with that item (Parent). This reflects the 25th percentile of the number of different visitors per parent category.
+
+We can simply use matrix subsetting using the rowCounts() and colCounts() functions within recommenderLab to apply these rules for sparsity reduction and ensuring that each user has enough test items available for learning the model and evaluating predicted top N items. Let's look at how many users were dropped as a result of this.
+
+``` r
+real_r_filtered <- real_r[rowCounts(real_r) >= different_parent_per_user_summary[2], ] # thirty
+nrow(real_r_filtered) - nrow(real_r)
+```
+
+    [1] -5963
+
+``` r
+summary(rowCounts(real_r_filtered))
+```
+
+       Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+       30.0    61.0   105.0   136.3   174.0  1798.0 
+
+As a result of this, we have -5963 fewer users in the matrix.
+
+Now also apply the subsetting rules for items.
+
+``` r
+real_r_filtered <- real_r_filtered[, colCounts(real_r_filtered) >= different_visitors_per_parent_summary[2],] # eighteen
+
+summary(colCounts(real_r_filtered))
+```
+
+       Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+       18.0    33.0    61.0   134.1   131.0  6684.0 
+
+As a result of this, we have -6154 fewer items in the dataset. The new dimensions of the updated realRatingMatrix are:
+
+    18034 x 17904 rating matrix of class 'realRatingMatrix' with 2400187 ratings.
+
+    [1] "realRatingMatrix"
+    attr(,"package")
+    [1] "recommenderlab"
+
+With 322880736 total cells in this realRatingMatrix, and 2400187 total ratings within these cells, the percent of non-missing entries in our reduced matrix is 0.743%. We improved our non-missing entries by about 69%, although our missingness is still very high.
+
 User Based Collaborative Filtering
 ----------------------------------
 
+### How the UBCF algorithm works
+
+1.  Using [cosine similarity](https://en.wikipedia.org/wiki/Cosine_similarity), figure out how similar each user *i* is to each other. Can also use [Pearson correlation](https://en.wikipedia.org/wiki/Pearson_correlation_coefficient). Jaccard similarity should only be used for binary rating recommenders.
+
+<!-- -->
+
+1.  for each user, identify the *k* most similar users to user *i*
+
+<!-- -->
+
+1.  Per each item *j*, average the ratings given by each user *i*'s nearest *k* users for each item that's not yet been rated by user *i*.
+
+<!-- -->
+
+1.  weight these imputed/predicted average ratings based on closest similarity score of each nearest *k* user to user *i* from the items they've already rated in common.
+
+<!-- -->
+
+1.  Select a Top-N recommendations threshold.
+
+### Create a train and test modeling scheme
+
+Here, we'll train 5 different user-based collaborative filtering models, each with a different set of parameters. The model will be evaluated based on the classification accuracy (ex. True Positive Rate, False Positive Rate) for different top-N recommended items in the test set. Instead of a simple training and test sample, we'll use 5-fold cross-validation. This will enable all of the user rows to contribute towards model testing in one of its folds. In other words, all 18034 user vectors of ratings will contribute towards the model test performance during 1 of 5 train/test iterations. This takes about 2 minutes to run on these data.
+
+``` r
+set.seed(2017)
+ubcf_scheme <- evaluationScheme(real_r_filtered,
+                                method = "cross-validation",
+                                k = 5,
+                                given = 10,  # how many records for a test user will learn the model? Remainder used for evaluating predictions. 
+                                goodRating = 3) # threshold for classification. Median Total_rating_max10.
+
+
+#s3save(ubcf_scheme, bucket = "pred498team5", object = "ubcf_scheme.Rdata")
+#s3load("user_items.Rdata", bucket = "pred498team5")
+
+ubcf_scheme
+```
+
+### Tuning Parameters for UBCF
+
+The different hyper-parameters that need to be specified for the UBCF algorithm are available in the model registry within `recommenderlab`. We'll focus here on the **UBCF\_realRatingMatrix** related algorithm. Brief descriptions of this algorithm and its default tuning parameters are illustrated below.
+
+``` r
+# recommenderRegistry$get_entries(dataType = "realRatingMatrix")
+recommenderRegistry$get_entries(dataType = "realRatingMatrix")$UBCF_realRatingMatrix 
+```
+
+    Recommender method: UBCF for realRatingMatrix
+    Description: Recommender based on user-based collaborative filtering.
+    Reference: NA
+    Parameters:
+        method nn sample normalize
+    1 "cosine" 25  FALSE  "center"
+
+Details about these 4 tuning parameters to account for with this recommender type:
+
+-   **method**: this is the type of similarity metric to calculate similarity between users real ratings profile. Cosine similarity, Pearson correlation coefficient, and Jaccard similarity are available options. The first two are not good options if using unary ratings.
+
+-   **nn**: this parameter sets the neighborhood of most similar users to consider for each user. The ratings profiles of the *k* nearest neighbors will be the basis for identifying what other users are similar to user *i*, and making new recommendations based on items user *i* has not yet rated that are liked by the *k* nearest neighbors.
+
+-   **sample**: a logical value to indicate whether the data should be sampled for train/test.
+
+-   **normalize**: how to normalize real ratings provided by different users. This is important because we generally should try to account for individuals behavioral biases by making sure that all ratings are scaled similarly. This can be done by passing a value to this parameter inside the algorithm or applied to the matrix before any modeling too. See `?normalize` for additional details. Zero mean centering will be used, where each user's row vector of ratings is subtracted by its row mean, centering each user's mean at zero. Z-scoring is an alternative method available too that additionally divides each user's rating by its standard deviation.
+
+### Create list of UBCF Models
+
+Next, we need to specify the different UBCF algorithms with specified hyper-parameters we want to pass different values for. For now, we'll focus on tuning 2 different similarity **methods** of "cosine" and "pearson". We'll also tune 2 different values of *nn* to start. We'll normalize the ratings per user for all of them. Again, even though these are implicit ratings based on click activity and each user *i*'s max weighted action with each Parent category, each user *i* has their own specific pattern of behavior per session over time, which we may inject a personal behavior bias we want to account for.
+
+``` r
+ubcf_algorithms <- list(
+  "ubcf_cosine_10nn" = list(name = "UBCF",
+                            param = list(method = "cosine", 
+                                         nn = 10,
+                                         normalize = "center")),
+  "ubcf_cosine_25nn" = list(name = "UBCF",
+                            param = list(method = "cosine", 
+                                         nn = 25,
+                                         normalize = "center")),
+  "ubcf_cosine_50nn" = list(name = "UBCF",
+                            param = list(method = "cosine", 
+                                         nn = 50,
+                                         normalize = "center")),
+  "ubcf_pearson_25nn" = list(name = "UBCF",
+                            param = list(method = "pearson", 
+                                         nn = 25,
+                                         normalize = "center")),
+  "ubcf_pearson_50nn" = list(name = "UBCF",
+                            param = list(method = "pearson", 
+                                         nn = 50,
+                                         normalize = "center"))
+)
+```
+
+### Run the UBCF Models
+
+Time to fit the recommender models. The type of model will be a "TopNList" recommender system instead of a "rating" based recommender system. This will allow us to evaluate models on the test data in a classification framework.
+
+``` r
+ubcf_results <- evaluate(ubcf_scheme, 
+                         ubcf_algorithms, 
+                         type = "topNList", 
+                         n = c(3, 5, 10, 15, 20, 25, 30))
+```
+
 Item Based Collaborative Filtering
 ----------------------------------
+
+``` r
+# recommenderRegistry$get_entries(dataType = "realRatingMatrix")
+recommenderRegistry$get_entries(dataType = "realRatingMatrix")$IBCF_realRatingMatrix 
+```
+
+    Recommender method: IBCF for realRatingMatrix
+    Description: Recommender based on item-based collaborative filtering.
+    Reference: NA
+    Parameters:
+       k   method normalize normalize_sim_matrix alpha na_as_zero
+    1 30 "Cosine"  "center"                FALSE   0.5      FALSE
