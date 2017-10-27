@@ -553,7 +553,9 @@ For this recommender system, recommendations of Parent categories were used inst
 
 The weighted rating, which in its final form is called the total_rating was derived in a series of steps:
 
-* **Step 1**: Within each visitor's session (ActionDate) with a Parent category, identify the maximum implicit rating (action_rating) the user gave to that Parent from its interaction. In the example below, Visitor #1000368642442 interacted with Parent #M65-364625 in three different sessions (2-22-2017, 6-14-2017, and  6-23-2017). Their interaction with Parent #M65-365145 occurred in one session only on 6-7-2017.    
+* **Step 1**: Within each visitor's session (ActionDate) with a Parent category, identify the maximum implicit rating (action_rating) the user gave to that Parent from its interaction. 
+
+    In the example below, Visitor #1000368642442 interacted with Parent #M65-364625 in three different sessions (2-22-2017, 6-14-2017, and  6-23-2017). Their interaction with Parent #M65-365145 occurred in one session only on 6-7-2017.    
 
 ``` {r}
 example_step1 <- user_items %>%
@@ -565,7 +567,6 @@ example_step1 %>%
   slice(104:115) %>%
   kable(align = 'c')
 ```
-
     For each of the sessions Visitor #1000368642442 had per table above, we extract the row of the max   action_rating it gave to each Parent category within the specific session.
 
 ``` {r}
@@ -660,9 +661,35 @@ user_ratings <- user_items %>%
   
 ### Total Rating of Parent by Visitor 
 
-Show the distribution of the new total rating score.
+I came up with 3 initial different ways to transform the total_rating per Parent category for every user to tighten the distribution of total_ratings. The 3 other transformations are a lognormal transformation, square root transformation, and coercing the upper limit to a max value of 10.  
 
-Compare it to other ratings transformations (i.e. lognormal, square root, coerce upper limit). 
+``` {r echo = TRUE}
+tidy_ratings <- user_ratings %>%
+  gather(key = rating_type, value = value, -VisitorId, -Parent)
+
+tidy_ratings %>%
+  ggplot(aes(value, fill = rating_type)) +
+  geom_histogram(data = filter(tidy_ratings, rating_type == "total_rating"), binwidth = 20, color = "black") +
+  geom_histogram(data = filter(tidy_ratings, rating_type != "total_rating"), binwidth = 1, color = "black") + 
+  facet_wrap(~ rating_type, scales = "free") +
+  labs(title = "Distribution of Visitors' Total Rating of Parent Part Families",
+       subtitle = "with different scale transformations") +
+  guides(fill = FALSE) +
+  scale_y_continuous(labels = function(n) format(n, scientific = FALSE)) # raw frequency scale
+
+
+remove(tidy_ratings)
+```
+``` {r}
+summary(user_ratings[3:6])
+```
+  
+We can also look at the standard deviation for each of the 4 different total_ratings too. Naturally, the raw total_ratings will have the largest standardized variance b/c of its extreme right-skew. When applying a sqrt() or log() transformation, we see that the scores seem to be pretty scrunched together. Using a coercion method, such as capping the upper limit at a max total_rating of 10 seems to balance keeping the scores in a reasonable range while allowing for variance between each Parent rating by each visitor. Total_rating_max10 will be what I use for these models going forward. 
+
+``` {r echo = TRUE}
+library(purrr)
+map_dbl(user_ratings[3:6], sd)
+```
 
 ### Setting up a User Ratings Matrix
 

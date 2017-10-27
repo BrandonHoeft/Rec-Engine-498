@@ -520,24 +520,25 @@ For this recommender system, recommendations of Parent categories were used inst
 
 The weighted rating, which in its final form is called the total\_rating was derived in a series of steps:
 
--   **Step 1**: Within each visitor's session (ActionDate) with a Parent category, identify the maximum implicit rating (action\_rating) the user gave to that Parent from its interaction. In the example below, Visitor \#1000368642442 interacted with Parent \#M65-364625 in three different sessions (2-22-2017, 6-14-2017, and 6-23-2017). Their interaction with Parent \#M65-365145 occurred in one session only on 6-7-2017.
+-   **Step 1**: Within each visitor's session (ActionDate) with a Parent category, identify the maximum implicit rating (action\_rating) the user gave to that Parent from its interaction.
 
-| ActionDate |   VisitorId   |   Parent   |  PartNumber | ActionId | ActionId\_label | action\_rating |
-|:----------:|:-------------:|:----------:|:-----------:|:--------:|:---------------:|:--------------:|
-| 2017-06-23 | 1000368642442 | M65-364625 | M6557298085 |     2    |   select Part   |        1       |
-| 2017-06-23 | 1000368642442 | M65-364625 | M6557298085 |     1    |   add to order  |        3       |
-| 2017-06-23 | 1000368642442 | M65-364625 | M6557298095 |     1    |   add to order  |        3       |
-| 2017-06-23 | 1000368642442 | M65-364625 | M6557298095 |     2    |   select Part   |        1       |
-| 2017-06-14 | 1000368642442 | M65-364625 | M6557298105 |     1    |   add to order  |        3       |
-| 2017-06-14 | 1000368642442 | M65-364625 | M6557298105 |     2    |   select Part   |        1       |
-| 2017-06-14 | 1000368642442 | M65-364625 | M6557298115 |     1    |   add to order  |        3       |
-| 2017-06-14 | 1000368642442 | M65-364625 | M6557298115 |     2    |   select Part   |        1       |
-| 2017-02-22 | 1000368642442 | M65-364625 | M6557298185 |     1    |   add to order  |        3       |
-| 2017-02-22 | 1000368642442 | M65-364625 | M6557298185 |     2    |   select Part   |        1       |
-| 2017-06-07 | 1000368642442 | M65-365145 | M6556778115 |     1    |   add to order  |        3       |
-| 2017-06-07 | 1000368642442 | M65-365145 | M6556778115 |     2    |   select Part   |        1       |
+    In the example below, Visitor \#1000368642442 interacted with Parent \#M65-364625 in three different sessions (2-22-2017, 6-14-2017, and 6-23-2017). Their interaction with Parent \#M65-365145 occurred in one session only on 6-7-2017.
 
-    For each of the sessions Visitor #1000368642442 had per table above, we extract the row of the max   action_rating it gave to each Parent category within the specific session.
+| ActionDate |     VisitorId     |      Parent     |   PartNumber   |   ActionId   |  ActionId\_label  |                                      action\_rating                                      |
+|:----------:|:-----------------:|:---------------:|:--------------:|:------------:|:-----------------:|:----------------------------------------------------------------------------------------:|
+| 2017-06-23 |   1000368642442   |    M65-364625   |   M6557298085  |       2      |    select Part    |                                             1                                            |
+| 2017-06-23 |   1000368642442   |    M65-364625   |   M6557298085  |       1      |    add to order   |                                             3                                            |
+| 2017-06-23 |   1000368642442   |    M65-364625   |   M6557298095  |       1      |    add to order   |                                             3                                            |
+| 2017-06-23 |   1000368642442   |    M65-364625   |   M6557298095  |       2      |    select Part    |                                             1                                            |
+| 2017-06-14 |   1000368642442   |    M65-364625   |   M6557298105  |       1      |    add to order   |                                             3                                            |
+| 2017-06-14 |   1000368642442   |    M65-364625   |   M6557298105  |       2      |    select Part    |                                             1                                            |
+| 2017-06-14 |   1000368642442   |    M65-364625   |   M6557298115  |       1      |    add to order   |                                             3                                            |
+| 2017-06-14 |   1000368642442   |    M65-364625   |   M6557298115  |       2      |    select Part    |                                             1                                            |
+| 2017-02-22 |   1000368642442   |    M65-364625   |   M6557298185  |       1      |    add to order   |                                             3                                            |
+| 2017-02-22 |   1000368642442   |    M65-364625   |   M6557298185  |       2      |    select Part    |                                             1                                            |
+| 2017-06-07 |   1000368642442   |    M65-365145   |   M6556778115  |       1      |    add to order   |                                             3                                            |
+| 2017-06-07 |   1000368642442   |    M65-365145   |   M6556778115  |       2      |    select Part    |                                             1                                            |
+| For each o | f the sessions Vi | sitor \#1000368 | 642442 had per | table above, | we extract the ro | w of the max action\_rating it gave to each Parent category within the specific session. |
 
 | ActionDate |   VisitorId   |   Parent   |  PartNumber | ActionId | ActionId\_label | action\_rating |
 |:----------:|:-------------:|:----------:|:-----------:|:--------:|:---------------:|:--------------:|
@@ -603,9 +604,48 @@ user_ratings <- user_items %>%
 
 ### Total Rating of Parent by Visitor
 
-Show the distribution of the new total rating score.
+I came up with 3 initial different ways to transform the total\_rating per Parent category for every user to tighten the distribution of total\_ratings. The 3 other transformations are a lognormal transformation, square root transformation, and coercing the upper limit to a max value of 10.
 
-Compare it to other ratings transformations (i.e. lognormal, square root, coerce upper limit).
+``` r
+tidy_ratings <- user_ratings %>%
+  gather(key = rating_type, value = value, -VisitorId, -Parent)
+
+tidy_ratings %>%
+  ggplot(aes(value, fill = rating_type)) +
+  geom_histogram(data = filter(tidy_ratings, rating_type == "total_rating"), binwidth = 20, color = "black") +
+  geom_histogram(data = filter(tidy_ratings, rating_type != "total_rating"), binwidth = 1, color = "black") + 
+  facet_wrap(~ rating_type, scales = "free") +
+  labs(title = "Distribution of Visitors' Total Rating of Parent Part Families",
+       subtitle = "with different scale transformations") +
+  guides(fill = FALSE) +
+  scale_y_continuous(labels = function(n) format(n, scientific = FALSE)) # raw frequency scale
+```
+
+![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-35-1.png)
+
+``` r
+remove(tidy_ratings)
+```
+
+      total_rating     total_rating_sqrt total_rating_logn total_rating_max10
+     Min.   :  1.000   Min.   : 1.000    Min.   :0.000     Min.   : 1.000    
+     1st Qu.:  3.000   1st Qu.: 1.732    1st Qu.:1.099     1st Qu.: 3.000    
+     Median :  3.000   Median : 1.732    Median :1.099     Median : 3.000    
+     Mean   :  4.745   Mean   : 1.984    Mean   :1.222     Mean   : 3.972    
+     3rd Qu.:  6.000   3rd Qu.: 2.449    3rd Qu.:1.792     3rd Qu.: 6.000    
+     Max.   :818.000   Max.   :28.601    Max.   :6.707     Max.   :10.000    
+
+We can also look at the standard deviation for each of the 4 different total\_ratings too. Naturally, the raw total\_ratings will have the largest standardized variance b/c of its extreme right-skew. When applying a sqrt() or log() transformation, we see that the scores seem to be pretty scrunched together. Using a coercion method, such as capping the upper limit at a max total\_rating of 10 seems to balance keeping the scores in a reasonable range while allowing for variance between each Parent rating by each visitor. Total\_rating\_max10 will be what I use for these models going forward.
+
+``` r
+library(purrr)
+map_dbl(user_ratings[3:6], sd)
+```
+
+          total_rating  total_rating_sqrt  total_rating_logn 
+             6.8333019          0.8988195          0.7360477 
+    total_rating_max10 
+             2.5783076 
 
 ### Setting up a User Ratings Matrix
 
