@@ -11,7 +11,7 @@
     -   [How many unique visitors have interacted with each Parent Family?](#how-many-unique-visitors-have-interacted-with-each-parent-family)
         -   [Impact of Long Tail Distributions](#impact-of-long-tail-distributions)
     -   [How many PartNumbers fall into each Parent Family?](#how-many-partnumbers-fall-into-each-parent-family)
-    -   [Do Parents with more PartNumbers also have more overall visitor clicks?](#do-parents-with-more-partnumbers-also-have-more-overall-visitor-clicks)
+    -   [Do Parents with more PartNumbers also have more Visitors?](#do-parents-with-more-partnumbers-also-have-more-visitors)
     -   [What types of click Actions do the visitors take?](#what-types-of-click-actions-do-the-visitors-take)
     -   [(TO EXPLORE) What percent of the time is selecting a part a precursor to adding to cart?](#to-explore-what-percent-of-the-time-is-selecting-a-part-a-precursor-to-adding-to-cart)
 -   [More Data Wrangling: Creating Ratings](#more-data-wrangling-creating-ratings)
@@ -404,7 +404,7 @@ user_items %>%
        Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
        1.00    2.00    6.00   15.31   14.00  786.00 
 
-### Do Parents with more PartNumbers also have more overall visitor clicks?
+### Do Parents with more PartNumbers also have more Visitors?
 
 When we roll PartNumbers up to the parent level, the number of different users who interact with a Parent category may be a function of the tally of different PartNumbers that inheret from the Parent. If this is the case, we'd likely see a correlation between the frequency of PartNumbers per Parent and the number of unique visitors per Parent. Collaborative filtering methods are notorious for being biased by the the most popularly rated items, as those ratings will be a large influence in measuring inter-user similarity (user-based collaborative filtering) or inter-item similarity (item-based collaborative filtering).
 
@@ -505,13 +505,13 @@ user_items %>%
 
 ### Creating a weighted Total Rating per item
 
-Having converted the 6 different possible actions into an implicit rating for each of the `nrow(user_items)` individual user interactions in the user\_items dataset, there is still some more pre-processing required of these **action\_ratings**.
+Having converted the 6 different possible actions into an implicit rating for each of the 8936075 individual user interactions in the user\_items dataset, there is still some more pre-processing required of these **action\_ratings**.
 
 For this recommender system, recommendations of Parent categories were used instead of a specific PartNumber prediction problem. Doing this helps reduce the high dimensionality of the items, therefore reducing the sparsity problem of few users rating a single PartNumber. It also improves the computation time of the recommender system as there are fewer Parent categories to create predicted recommendations for relative to PartNumbers.
 
 The weighted rating, which in its final form is called the total\_rating was derived in a series of steps:
 
--   **Step 1**: Within each visitor's session (ActionDate) with a Parent category, identify the maximum implicit rating (action\_rating) the user gave to that Parent from its interaction.
+-   **Step 1**: Within each visitor's session (ActionDate) with a Parent category, identify the maximum action\_rating the user gave to that Parent from its interaction.
 
     In the example below, Visitor \#1000368642442 interacted with Parent \#M65-364625 in three different sessions (2-22-2017, 6-14-2017, and 6-23-2017). Their interaction with Parent \#M65-365145 occurred in one session only on 6-7-2017.
 
@@ -540,7 +540,7 @@ The weighted rating, which in its final form is called the total\_rating was der
 | 2017-02-22 | 1000368642442 | M65-364625 | M6557298185 |     1    |   add to order  |        3       |
 | 2017-06-07 | 1000368642442 | M65-365145 | M6556778115 |     1    |   add to order  |        3       |
 
--   **Step 2**: If there are multiple max action\_rating interactions per Parent within the same session (for example the user did the "add to cart" action over multiple PartNumbers in the single session that inherit from the same Parent category), we will sum these max action\_rating values up within that session to get a session\_action\_rating. The intuition here is that the more PartNumbers in a specific Parent category the user interacted with in a single session is a higher inferred endorsement of that Parent.
+-   **Step 2**: If there are multiple max action\_rating interactions per Parent within the same session (ex. the user did an "add to cart" action over multiple PartNumbers in a session, all inheriting from the same Parent category), we will sum these max action\_rating values up within that session to get a session\_action\_rating. The intuition here is that the more PartNumbers in a specific Parent category the user interacted with in a single session is a higher inferred endorsement of that Parent.
 
     Back to our example. Visitor \#1000368642442 did in fact interact with multiple different PartNumbers of the same Parent \#M65-364625 within a couple specific sessions (6-14-2017 and 6-23-2017). Hence multiple rows for those dates as illustrated above. Per the described weighting method, we sum up the max action\_rating values within the session (ActionDate) and Parent category to yield Visitor \#1000368642442's session\_action\_rating with a Parent.
 
@@ -650,16 +650,16 @@ sample_n(user_ratings[,1:3], 10) %>%
 
 |   VisitorId   |   Parent   | total\_rating |
 |:-------------:|:----------:|:-------------:|
-|  818941368696 | O67-469464 |       2       |
-| 7291558866614 | M66-371260 |       2       |
-|  514053808745 | M66-370525 |       21      |
-|  513450892594 | O65-463869 |       2       |
-| 9316952538593 | O65-492394 |       1       |
-| 1418024805801 | P66-300760 |       3       |
-|  731626368751 | P65-301955 |       6       |
-|  906738707619 | N66-547772 |       6       |
-| 1123528858267 | P65-307839 |       12      |
-|  901345656160 | P66-304450 |       18      |
+|  647027980726 | P66-304060 |       3       |
+| 1408747058923 | O65-465939 |       9       |
+|  621451876059 | O67-464364 |       6       |
+|  733740261545 | O66-493394 |       12      |
+| 1124236964536 | P65-306717 |       3       |
+|  612948177427 | M78-409515 |       2       |
+|  726734131242 | O67-478224 |       2       |
+|  803856000258 | M67-409095 |       1       |
+| 8156451706107 | O66-465104 |       3       |
+| 1333648509124 | N66-542027 |       3       |
 
 These 3 components are all that is needed to craete a user-items rating matrix. The rows of the matrix will represent individual users, columns will represent the distinct Parent categories, and the elements in the matrix will represent the respective total\_rating of the item.
 

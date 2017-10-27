@@ -436,7 +436,7 @@ user_items %>%
 ```
   
   
-### Do Parents with more PartNumbers also have more overall visitor clicks? 
+### Do Parents with more PartNumbers also have more Visitors? 
 
 When we roll PartNumbers up to the parent level, the number of different users who interact with a Parent category may be a function of the tally of different PartNumbers that inheret from the Parent. If this is the case, we'd likely see a correlation between the frequency of PartNumbers per Parent and the number of unique visitors per Parent. Collaborative filtering methods are notorious for being biased by the the most popularly rated items, as those ratings will be a large influence in measuring inter-user similarity (user-based collaborative filtering) or inter-item similarity (item-based collaborative filtering). 
 
@@ -561,13 +561,13 @@ user_items %>%
   
 ### Creating a weighted Total Rating per item
 
-Having converted the 6 different possible actions into an implicit rating for each of the `nrow(user_items)` individual user interactions in the user_items dataset, there is still some more pre-processing required of these **action_ratings**.
+Having converted the 6 different possible actions into an implicit rating for each of the `r nrow(user_items)` individual user interactions in the user_items dataset, there is still some more pre-processing required of these **action_ratings**.
 
 For this recommender system, recommendations of Parent categories were used instead of a specific PartNumber prediction problem. Doing this helps reduce the high dimensionality of the items, therefore reducing the sparsity problem of few users rating a single PartNumber. It also improves the computation time of the recommender system as there are fewer Parent categories to create predicted recommendations for relative to PartNumbers. 
 
 The weighted rating, which in its final form is called the total_rating was derived in a series of steps:
 
-* **Step 1**: Within each visitor's session (ActionDate) with a Parent category, identify the maximum implicit rating (action_rating) the user gave to that Parent from its interaction. 
+* **Step 1**: Within each visitor's session (ActionDate) with a Parent category, identify the maximum action_rating the user gave to that Parent from its interaction. 
 
     In the example below, Visitor #1000368642442 interacted with Parent #M65-364625 in three different sessions (2-22-2017, 6-14-2017, and  6-23-2017). Their interaction with Parent #M65-365145 occurred in one session only on 6-7-2017.    
 
@@ -597,7 +597,7 @@ example_step1 %>%
 ```
   
   
-* **Step 2**: If there are multiple max action_rating interactions per Parent within the same session (for example the user did the "add to cart" action over multiple PartNumbers in the single session that inherit from the same Parent category), we will sum these max action_rating values up within that session to get a session_action_rating. The intuition here is that the more PartNumbers in a specific Parent category the user interacted with in a single session is a higher inferred endorsement of that Parent. 
+* **Step 2**: If there are multiple max action_rating interactions per Parent within the same session (ex. the user did an "add to cart" action over multiple PartNumbers in a session, all inheriting from the same Parent category), we will sum these max action_rating values up within that session to get a session_action_rating. The intuition here is that the more PartNumbers in a specific Parent category the user interacted with in a single session is a higher inferred endorsement of that Parent. 
 
     Back to our example. Visitor #1000368642442 did in fact interact with multiple different PartNumbers of  the same Parent #M65-364625 within a couple specific sessions (6-14-2017 and 6-23-2017). Hence multiple rows for those dates as illustrated above. Per the described weighting method, we sum up the max action_rating values within the session (ActionDate) and Parent category to yield Visitor #1000368642442's session_action_rating with a Parent. 
 
