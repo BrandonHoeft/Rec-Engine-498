@@ -124,7 +124,7 @@ user_items <- users %>%
 Check that the left join preserved all of the original data in our full users dataset after joining in the Parent value associated with each PartNumber searched by users.
 
 ``` {r echo = TRUE}
-all.equal(users[1:5], user_items[1:5])
+all.equal(users[1:3], user_items[1:3])
 ```
 
 Our original datasets are taking up a lot of memory. Specifically, all other datasets other than user_items are currently taking up `r object_size(users, items, users_febmar17, users_aprmayjun17, users_julaug17)`MB of RAM. We'll remove them since everything we need in terms of user click data, the PartNumbers, Parent, actions taken, and the action date are all in the user_items dataset. Our main user_items dataset is quite large, requiring `r object_size(user_items)` MB of RAM. 
@@ -165,19 +165,22 @@ With a baseline dataset and description of the different variables provided abov
 
 Again, the web activity covered by these user clicks on the website begins on `r min(user_items$ActionDate)` and goes through `r max(user_items$ActionDate) `, covering a span of `r max(user_items$ActionDate) - min(user_items$ActionDate)` days. 
 
-### Weekly Users and Total Clicks
+### Weekly Web log Activity 
+
+For the `r unique(user_items$VisitorId) %>% length()` unique VisitorIDs in this random sample of user data, it is good to know how these users interacted on the website over time in terms of total clicks, the number of different PartNumbers that are interacted with, and he number of different Parent categories interacted with over fixed intervals of time. 
+
+The line chart shows that engagement in terms of clicks, PartNumbers, Parent categories over time is generally pretty consistent week to week. There are som exceptions. For instance in the week ending 5-14-17, there were only 4 total clicks recorded for 4 different PartNumbers of 4 different Parent categories, which is highly anomalous. Additionally, the week ending July 2, 2017 also saw a noticeable spike in click activity and user interaction with different PartNumbers and Parent categories. This may be because users were planning to be off the following week since 4th of July fell on the following Tuesday. 
+
+Summary statistics are provided after the chart for each of the three different measures. 
 
 ``` {r echo = TRUE}
 weekly_activity <- user_items %>%
   mutate(week_ending_date = ceiling_date(ActionDate, "week")) %>%
   group_by(week_ending_date) %>%
-  summarize(unique_users = length(unique(VisitorId)),
-            total_clicks = n()) %>%
+  summarize(PartNumbers_count = length(unique(PartNumber)), # number of different Partnumbers interacted with.
+            Parent_category_count = length(unique(Parent)), # number of different Parents interacted with.
+            total_clicks = sum(ActionCount)) %>%
   arrange(week_ending_date)
-
-temp <- weekly_activity %>%
-  mutate(week_ending_date = as.Date(week_ending_date, "%Y-%m-%d")) 
-
 
 weekly_activity %>%
   mutate(week_ending_date = as.Date(week_ending_date, "%Y-%m-%d")) %>% 
@@ -186,43 +189,58 @@ weekly_activity %>%
     geom_line(aes(color = key)) +
     scale_x_date(date_breaks = ("1 month"),
                date_labels = c(month.name[1:9])) +
-    scale_y_continuous(labels = function(n) format(n, scientific = FALSE)) + # raw frequency scale
-    labs(title = "Weekly Distribution of Sample of Users and their total click Actions",
+    scale_y_sqrt(breaks = c(1, 50, 2500, 25000, 75000, 200000, 400000, 600000, 800000),
+                 labels = function(n) format(n, scientific = FALSE)) + # raw frequency scale
+    labs(title = "Web log Activity by Users Over Time",
+         subtitle = "broken down weekly",
          x = "2017",
          y = "Count") 
-
 ```
   
-  
-Generally, the number of unique users each week in this dataset distributes as indicated below. There was one particularly unusual week around May 14, where there was almost no user or click activity noted, as indicated by the graph above. 
+The number of clicks by this sample of users distributed week over week as indicated by the table below. There was one particularly unusual week around May 14, as previously highlighted.
 
 ``` {r echo = TRUE}
 library(knitr)
 weekly_activity %>%
-  summarize(First_Quartile = quantile(unique_users, .25),
-            median = median(unique_users),
-            mean = mean(unique_users),
-            Third_Quartile = quantile(unique_users, .75),
-            Std_Deviation = sd(unique_users)
-            ) %>%
-  kable(caption = 'Typical Count of Unique Users by Week', align = 'c')
-```
-  
-  
-The number of clicks by these unique users generally distributes as indicated by the table below. There was one particularly unusual week around May 14, where there was almost no user or click activity noted, as indicated by the graph above. 
-
-``` {r echo = TRUE}
-library(knitr)
-weekly_activity %>%
-  summarize(First_Quartile = quantile(total_clicks, .25),
+  summarize(minimum = min(total_clicks),
+            First_Quartile = quantile(total_clicks, .25),
             median = median(total_clicks),
             mean = mean(total_clicks),
             Third_Quartile = quantile(total_clicks, .75),
-            Std_Deviation = sd(total_clicks)
-            ) %>%
+            maximum = max(total_clicks),
+            Std_Deviation = sd(total_clicks)) %>%
   kable(caption = 'Typical Count of total clicks by Week', align = 'c')
 ```
+
+The number of different PartNumbers interacted with each week by users in this dataset distributes as indicated by the following summary statistics. 
+
+``` {r echo = TRUE}
+library(knitr)
+weekly_activity %>%
+  summarize(minimum = min(PartNumbers_count),
+            First_Quartile = quantile(PartNumbers_count, .25),
+            median = median(PartNumbers_count),
+            mean = mean(PartNumbers_count),
+            Third_Quartile = quantile(PartNumbers_count, .75),
+            maximum = max(PartNumbers_count),
+            Std_Deviation = sd(PartNumbers_count)) %>%
+  kable(caption = 'PartNumbers interacted with by Users each Week', align = 'c')
+```
   
+The number of different Parent categories interacted with each week in this dataset distributes as indicated by the following summary statistics.  
+
+``` {r echo = TRUE}
+library(knitr)
+weekly_activity %>%
+  summarize(minimum = min(Parent_category_count),
+            First_Quartile = quantile(Parent_category_count, .25),
+            median = median(Parent_category_count),
+            mean = mean(Parent_category_count),
+            Third_Quartile = quantile(Parent_category_count, .75),
+            maximum = max(Parent_category_count),
+            Std_Deviation = sd(Parent_category_count)) %>%
+  kable(caption = 'Parent categories interacted with by Users each Week', align = 'c')
+```
   
 ### Description of Unique Visitors, PartNumbers, Parents
 
