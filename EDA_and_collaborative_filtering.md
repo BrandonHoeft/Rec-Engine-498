@@ -11,13 +11,13 @@
     -   [How many unique visitors have interacted with each Parent Family?](#how-many-unique-visitors-have-interacted-with-each-parent-family)
         -   [Impact of Long Tail Distributions](#impact-of-long-tail-distributions)
     -   [How many PartNumbers fall into each Parent Family?](#how-many-partnumbers-fall-into-each-parent-family)
-    -   [(TO EXPLORE) Do Parents with more PartNumbers also have more overall visitor clicks?](#to-explore-do-parents-with-more-partnumbers-also-have-more-overall-visitor-clicks)
+    -   [Do Parents with more PartNumbers also have more overall visitor clicks?](#do-parents-with-more-partnumbers-also-have-more-overall-visitor-clicks)
     -   [What types of click Actions do the visitors take?](#what-types-of-click-actions-do-the-visitors-take)
     -   [(TO EXPLORE) What percent of the time is selecting a part a precursor to adding to cart?](#to-explore-what-percent-of-the-time-is-selecting-a-part-a-precursor-to-adding-to-cart)
 -   [More Data Wrangling: Creating Ratings](#more-data-wrangling-creating-ratings)
     -   [Convert Actions to Implicit Ratings](#convert-actions-to-implicit-ratings)
     -   [Creating a weighted Total Rating per item](#creating-a-weighted-total-rating-per-item)
-    -   [Total Rating of Parent by Visitor](#total-rating-of-parent-by-visitor)
+    -   [Different Scale Transformations for Total\_ratings](#different-scale-transformations-for-total_ratings)
     -   [Setting up a User Ratings Matrix](#setting-up-a-user-ratings-matrix)
 -   [Collaborative Filtering Algorithms](#collaborative-filtering-algorithms)
 -   [User Based Collaborative Filtering](#user-based-collaborative-filtering)
@@ -283,7 +283,7 @@ user_items %>%
              color = "black", linetype = "dashed", size = 0.5) +
   geom_text(aes(0,.002, family = "courier", label = paste("median = ", median(unique_part_count))), 
             nudge_x = 600, color = "black", size = 4.5) +
-  labs(title = 'Distribution of Unique PartNumber Interactions by each Visitor',
+  labs(title = 'Distribution of how many PartNumbers each Visitor interacted with',
        subtitle = 'binwidth of 100',
        x = 'Unique PartNumbers per Visitor')
 ```
@@ -309,7 +309,7 @@ user_items %>%
              color = "black", linetype = "dashed", size = 0.5) +
   geom_text(aes(0,.004, family = "courier", label = paste("median = ", median(unique_parent_count))), 
             nudge_x = 300, color = "black", size = 4.5) +
-  labs(title = 'Distribution of Unique Parent Interactions',
+  labs(title = 'Distribution of how many Parent categories each Visitor interacted with',
        subtitle = 'binwidth of 50',
        x = 'Unique Parent category per Visitor')
 ```
@@ -336,7 +336,7 @@ user_items %>%
              color = "black", linetype = "dashed", size = 0.5) +
   geom_text(aes(0,.04, family = "courier", label = paste("median = ", median(unique_users_count))), 
             nudge_x = 60, color = "black", size = 4.5) +
-  labs(title = 'Distribution of Unique Visitor Interactions for each PartNumber',
+  labs(title = 'Distribution of Unique Visitors for each PartNumber',
        subtitle = 'binwidth of 10',
        x = 'Unique Visitors per PartNumber (upper limit coerced to 500)')
 ```
@@ -404,22 +404,13 @@ user_items %>%
        Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
        1.00    2.00    6.00   15.31   14.00  786.00 
 
-### (TO EXPLORE) Do Parents with more PartNumbers also have more overall visitor clicks?
+### Do Parents with more PartNumbers also have more overall visitor clicks?
 
-IF we roll PartNumbers up to the parent level, there may be a potential concern that the frequency of ratings per a Parent category may be a function of the diversity of PartNumbers that make up the Parent. If this is the case, we'd likely see a correlation pattern between the frequency of PartNumbers per Parent and the number of unique visitors per Parent. In other words, the most popular parents could just be the ones with the most PartNumbers in these data.
+When we roll PartNumbers up to the parent level, the number of different users who interact with a Parent category may be a function of the tally of different PartNumbers that inheret from the Parent. If this is the case, we'd likely see a correlation between the frequency of PartNumbers per Parent and the number of unique visitors per Parent. Collaborative filtering methods are notorious for being biased by the the most popularly rated items, as those ratings will be a large influence in measuring inter-user similarity (user-based collaborative filtering) or inter-item similarity (item-based collaborative filtering).
 
-That could be a potential source of concern or area for further research in these data as collaborative filtering recommendations can be influenced by the most popular items.
+![](EDA_and_collaborative_filtering_files/figure-markdown_github/unnamed-chunk-24-1.png)
 
-``` r
-user_items %>%
-  group_by(Parent) %>%
-  distinct(VisitorId) %>% # only keep distinct visitors per Item.
-  summarize(unique_users_count = n()) %>%
-  with(summary(unique_users_count))
-```
-
-       Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-       1.00   18.00   41.00  105.62   99.75 7063.00 
+However, this may be a necessary trade-off for these types of recommender systems as the more items in common that any pair of users have rated, the more robust the measures of similarity are, from which new recommendations can be made for items. For these algorithms to work well, it is important to adequately measure similar users or items, which is already difficult with very sparse matrices filled with primarily missing entries.
 
 ### What types of click Actions do the visitors take?
 
@@ -602,7 +593,7 @@ user_ratings <- user_items %>%
   arrange(VisitorId, total_rating)
 ```
 
-### Total Rating of Parent by Visitor
+### Different Scale Transformations for Total\_ratings
 
 I came up with 3 initial different ways to transform the total\_rating per Parent category for every user to tighten the distribution of total\_ratings. The 3 other transformations are a lognormal transformation, square root transformation, and coercing the upper limit to a max value of 10.
 
@@ -616,7 +607,8 @@ tidy_ratings %>%
   geom_histogram(data = filter(tidy_ratings, rating_type != "total_rating"), binwidth = 1, color = "black") + 
   facet_wrap(~ rating_type, scales = "free") +
   labs(title = "Distribution of Visitors' Total Rating of Parent Part Families",
-       subtitle = "with different scale transformations") +
+       subtitle = "with different scale transformations",
+       x = NULL) +
   guides(fill = FALSE) +
   scale_y_continuous(labels = function(n) format(n, scientific = FALSE)) # raw frequency scale
 ```
@@ -635,11 +627,11 @@ remove(tidy_ratings)
      3rd Qu.:  6.000   3rd Qu.: 2.449    3rd Qu.:1.792     3rd Qu.: 6.000    
      Max.   :818.000   Max.   :28.601    Max.   :6.707     Max.   :10.000    
 
-We can also look at the standard deviation for each of the 4 different total\_ratings too. Naturally, the raw total\_ratings will have the largest standardized variance b/c of its extreme right-skew. When applying a sqrt() or log() transformation, we see that the scores seem to be pretty scrunched together. Using a coercion method, such as capping the upper limit at a max total\_rating of 10 seems to balance keeping the scores in a reasonable range while allowing for variance between each Parent rating by each visitor. Total\_rating\_max10 will be what I use for these models going forward.
+We can also look at the standard deviation for each of the 4 different total\_ratings too. Naturally, the raw total\_ratings will have the largest standardized variance b/c of its extreme right-skew. When applying a sqrt() or log() transformation, the total\_ratings preserve their rank order but we also see that the scores are much more scrunched together in the middle 50% range of values, or interquartile range (IQR), also reflected by their low standard deviation. The last option I tried was using a coercion method, such as capping the upper limit at a max total\_rating of 10. Doing so seems to balance keeping the scores in a reasonable range while allowing for variance between each Parent rating by each visitor, especially in the IQR. Total\_rating\_max10 will be what I use for these models going forward.
 
 ``` r
 library(purrr)
-map_dbl(user_ratings[3:6], sd)
+map_dbl(user_ratings[3:6], sd) # get the standard deviation for each total_rating type.
 ```
 
           total_rating  total_rating_sqrt  total_rating_logn 
@@ -649,14 +641,80 @@ map_dbl(user_ratings[3:6], sd)
 
 ### Setting up a User Ratings Matrix
 
+We're at the point now where we have a dataset where each row represents the total\_rating of a specific item (Parent) made by a specific VisitorID.
+
+``` r
+sample_n(user_ratings[,1:3], 10) %>%
+  kable(align = 'c')
+```
+
+|   VisitorId   |   Parent   | total\_rating |
+|:-------------:|:----------:|:-------------:|
+|  818941368696 | O67-469464 |       2       |
+| 7291558866614 | M66-371260 |       2       |
+|  514053808745 | M66-370525 |       21      |
+|  513450892594 | O65-463869 |       2       |
+| 9316952538593 | O65-492394 |       1       |
+| 1418024805801 | P66-300760 |       3       |
+|  731626368751 | P65-301955 |       6       |
+|  906738707619 | N66-547772 |       6       |
+| 1123528858267 | P65-307839 |       12      |
+|  901345656160 | P66-304450 |       18      |
+
+These 3 components are all that is needed to craete a user-items rating matrix. The rows of the matrix will represent individual users, columns will represent the distinct Parent categories, and the elements in the matrix will represent the respective total\_rating of the item.
+
+To make the storage of the matrix memory efficient, a sparse matrix will be used. A sparse matrix, using a package like `matrix` only fills the non-missing entries in the matrix, making them [very memory efficient](http://www.johnmyleswhite.com/notebook/2011/10/31/using-sparse-matrices-in-r/) for large matrix objects.
+
+The row (i) and column (j) indices of a matrix need to be 1 starting index based. The easiest way to facilitate this while still being able to map the row and column labels is to coerce the VisitorId and Parent columns in our dataset to as.factor() and then to as.integer(). When coercing to a factor, the values will be alphabetically sorted by default. We can then pass dimension names to the row and columns of the matrix by passing the unique, sorted VisitorId and Parent labels. See code below for details.
+
+``` r
+library(Matrix)
+# sparse ratings matrix.
+# https://stackoverflow.com/questions/28430674/create-sparse-matrix-from-data-frame?noredirect=1&lq=1
+# the VisitorId and Parent need to be 1 based indices when creating a matrix. 
+# Per ?factor, the levels of a factor are by default sorted.
+sparse_r <- sparseMatrix(i = as.integer(as.factor(user_ratings$VisitorId)), 
+                         j = as.integer(as.factor(user_ratings$Parent)),
+                         x = user_ratings$total_rating_max10)
+
+# can rename the matrix row and column labels with unique VisitorId and Parent names. 
+dimnames(sparse_r) <- list(sort(unique(user_ratings$VisitorId)),
+                           sort(unique(user_ratings$Parent)))
+```
+
+We can check that the levels of the coerced factor are identical name position matches to the dimnames that we passed as labels to the rows and columns of the sparse matrix.
+
+``` r
+all.equal(levels(as.factor(user_ratings$VisitorId)), 
+          sort(unique(user_ratings$VisitorId))) 
+```
+
+    [1] TRUE
+
+``` r
+all.equal(levels(as.factor(user_ratings$Parent)), 
+          sort(unique(user_ratings$Parent))) 
+```
+
+    [1] TRUE
+
+``` r
+# class(sparse_r)
+# dim(sparse_r)
+# attributes(sparse_r)
+# str(sparse_r) # it's an S4 object. use slots (@) to access elements. 
+```
+
 Collaborative Filtering Algorithms
 ----------------------------------
 
+According to Aggawal (2016), collaborative filtering models use the "power of the ratings provided by multiple users to make recommendations" (1.3.1). By finding out how users are similar to each other based on how they may rate the same items in a correlated way, or how items may be rated in a correlated way across different users, an algorithm can leverage these correlations or measures of similarity as the basis to predict and recommend new items not yet rated by an indvidual.
+
 For collaborative filtering recommender systems, the recommendations are largely based on the ability to identify recommendations by
 
--   1.  finding similar users who've rated the same items similarly to me, which addresses a recommendation hypothesis of "what other users are like me, and what items do they purchase?". This is known as **user-based collaborative filtering**. It finds users who have similar interest in items as you and recommends new items based on what they may rate highly.
+-   1.  finding similar users who've rated the same items similarly to me. This method addresses a recommendation hypothesis of "what other users are like me, and what items do they purchase?" This is known as **user-based collaborative filtering**. It finds users who have similar interest in items as you and recommends new items based on a weighted formula of what they rate highly that you haven't yet looked at or purchased.
 
--   1.  We can also make recommendations by finding items that are similarly rated to the ones that a user has rated. In this case, neighborhoods are defined not by similar users but by items with similar ratings pattern to items the user has already rated. This is known as **item-based collaborative filtering**. It addresses a recommendation hypothesis of "people who liked this also tend to like this" or "What items are most similar to the ones that I’ve purchased that may interest me?"
+-   1.  We can also make recommendations by finding items that are similarly rated to the ones that a user has rated. In this case, neighborhoods are defined not by similar users but by items with similar ratings pattern across users. These item similarity measures are then compared to the items the user has already rated. This is known as **item-based collaborative filtering**. It addresses a recommendation hypothesis of "people who liked this also tend to like this" or "What items are most similar to the ones that I’ve purchased that may interest me?"
 
 User Based Collaborative Filtering
 ----------------------------------
