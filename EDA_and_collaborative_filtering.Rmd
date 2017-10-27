@@ -872,18 +872,19 @@ class(real_r_filtered)
 
 With `r nrow(real_r_filtered) * ncol(real_r_filtered)` total cells in this realRatingMatrix, and `r sum(rowCounts(real_r_filtered))` total ratings within these cells, the percent of non-missing entries in our reduced matrix is `r real_r_filtered_non_missing_percent`%. We improved our non-missing entries by about `r round((real_r_filtered_non_missing_percent - real_r_non_missing_percent) / real_r_non_missing_percent, 2) * 100`%, although our missingness is still very high. 
 
-Now that we have a realRatingMatrix object, we can focus on identifying what algorithms we want to explore for collaborative filtering. To start, we'll focus on tuning 2 popular collaborative filtering algorithms, **UBCF_realRatingMatrix** and **IBCF_realRatingMatrix**. Brief descriptions of these algorithms and their default tuning parameters are illustrated below. 
-
-``` {r echo = TRUE}
-# types of collaborative filtering algorithms
-# recommenderRegistry$get_entries(dataType = "realRatingMatrix")
-recommenderRegistry$get_entries(dataType = "realRatingMatrix")$UBCF_realRatingMatrix 
-recommenderRegistry$get_entries(dataType = "realRatingMatrix")$IBCF_realRatingMatrix 
-
-
-```
-
 ## User Based Collaborative Filtering
+  
+
+### How the UBCF algorithm works
+
+1. Using [cosine similarity](https://en.wikipedia.org/wiki/Cosine_similarity), figure out how similar each user *i* is to each other. Can also use [Pearson correlation](https://en.wikipedia.org/wiki/Pearson_correlation_coefficient). Jaccard similarity should only be used for binary rating recommenders.
+  i) for each user, identify the *k* most similar users to user *i*
+2. Per each item *j*, average the ratings given by each user *i*'s nearest *k* users for each item that's not yet been rated by user *i*.
+  i) weight these imputed/predicted average ratings based on closest similarity score of each nearest *k* user to user *i* from the items they've already rated in common.
+3. Select a Top-N recommendations threshold. 
+  
+
+### Create a train and test modeling scheme
 
 Here, we'll train 5 different user-based collaborative filtering models, each with a different set of parameters. The model will be evaluated based on the classification accuracy (ex. True Positive Rate, False Positive Rate) for different top-N recommended items in the test set. Instead of a simple training and test sample, we'll use 5-fold cross-validation. This will enable all of the user rows to contribute towards model testing in one of its folds. In other words, all `r nrow(real_r_filtered)` user vectors of ratings will contribute towards the model test performance during 1 of 5 train/test iterations. This takes about 2 minutes to run on these data.
 
@@ -901,8 +902,31 @@ ubcf_scheme <- evaluationScheme(real_r_filtered,
 
 ubcf_scheme
 ```
+  
 
-Next, we need to specify the different UBCF algorithms with specified hyper-parameters we want to try out.
+### Tuning Parameters for UBCF
+
+The different hyper-parameters that need to be specified for the UBCF algorithm are available in the model registry within `recommenderlab`. We'll focus here on the **UBCF_realRatingMatrix** related algorithm. Brief descriptions of this algorithm and its default tuning parameters are illustrated below. 
+
+``` {r echo = TRUE}
+# recommenderRegistry$get_entries(dataType = "realRatingMatrix")
+recommenderRegistry$get_entries(dataType = "realRatingMatrix")$UBCF_realRatingMatrix 
+
+
+```
+
+Details about these 4 tuning parameters to account for with this recommender type:
+
+* **method**: this is the type of similarity metric to calculate similarity between users real ratings profile. Cosine similarity, Pearson correlation coefficient, and Jaccard similarity are available options. The first two are not good options if using unary ratings.
+
+* **nn**: this parameter sets the neighborhood of most similar users to consider for each user. The ratings profiles of the *k* nearest neighbors will be the basis for identifying what other users are similar to user *i*, and making new recommendations based on items user *i* has not yet rated that are liked by the *k* nearest neighbors.
+
+* **sample**: a logical value to indicate whether the data should be sampled for train/test.
+
+* **normalize**: how to normalize real ratings provided by different users. This is important because we generally should try to account for individuals behavioral biases by making sure that all ratings are scaled similarly. This can be done by passing a value to this parameter inside the algorithm or applied to the matrix before any modeling too. See `?normalize` for additional details. Zero mean centering will be used, where each user's row vector of ratings is subtracted by its row mean, centering each user's mean at zero. Z-scoring is an alternative method available too that additionally divides each user's rating by its standard deviation. 
+
+
+Next, we need to specify the different UBCF algorithms with specified hyper-parameters we want to pass different values for. For now, we'll focus on tuning 2 different similarity **methods** of "cosine" and "pearson". We'll also tune 2 different values of *nn* to start. We'll normalize the ratings per user for all of them. Again, even though these are implicit ratings based on click activity and each user *i*'s max weighted action with each Parent category, each user *i* has their own specific pattern of behavior per session over time, which we may inject a personal behavior bias we want to account for.
 
 ``` {r echo = TRUE}
 ubcf_algorithms <- list(
@@ -915,3 +939,10 @@ with the evaluationScheme(), which
 
 
 ## Item Based Collaborative Filtering
+
+``` {r echo = TRUE}
+# recommenderRegistry$get_entries(dataType = "realRatingMatrix")
+recommenderRegistry$get_entries(dataType = "realRatingMatrix")$IBCF_realRatingMatrix 
+
+
+```
