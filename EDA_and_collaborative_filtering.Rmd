@@ -496,7 +496,7 @@ user_items %>%
   summarize(frequency = n()) %>%
   ggplot(aes(x = reorder(ActionId_label, desc(frequency)), y = frequency / sum(frequency))) +
     geom_bar(aes(fill = ActionId_label), stat = "identity") +
-    labs(title = "Distribution of click Actions taken by Users",
+    labs(title = "Click Actions taken by Users",
          subtitle = "on company website",
          x = NULL,
          y = "Percent") +
@@ -554,7 +554,7 @@ user_items %>%
   summarize(frequency = n()) %>%
   ggplot(aes(x = action_rating, y = frequency / sum(frequency))) +
     geom_bar(aes(fill = desc(action_rating)), stat = "identity") +
-    labs(title = "Distribution of Implicit Action Ratings taken by Users",
+    labs(title = "Implicit Action Ratings taken by Users",
          subtitle = "on company website",
          x = NULL,
          y = "Percent",
@@ -691,9 +691,9 @@ user_ratings <- user_items %>%
 ```
   
   
-### Different Scale Transformations for Total_ratings
+### Selecting an Appropriate Scale Transformation for Total_rating.
 
-I came up with 3 initial different ways to transform the total_rating per Parent category for every user to tighten the distribution of total_ratings. The 3 other transformations are a lognormal transformation, square root transformation, and coercing the upper limit to a max value of 10.  
+Came up with 3 initial different ways to transform the total_rating per item (the Parent category) in order to handle the large outliers in the raw total_rating distribution. The 3 other transformations are a lognormal transformation, square root transformation, and coercing the upper limit to a max value of 10. These are visualized below alongside the original total_rating.
 
 ``` {r echo = TRUE}
 tidy_ratings <- user_ratings %>%
@@ -713,23 +713,35 @@ tidy_ratings %>%
 
 remove(tidy_ratings)
 ```
+  
+Below are the standard summary stats below for each of the 4 different ratings methods. 
+
 ``` {r}
 summary(user_ratings[3:6])
 ```
-  
-We can also look at the standard deviation for each of the 4 different total_ratings too. Naturally, the raw total_ratings will have the largest standardized variance b/c of its extreme right-skew. When applying a sqrt() or log() transformation, the total_ratings preserve their rank order but we also see that the scores are much more scrunched together in the middle 50% range of values, or interquartile range (IQR), also reflected by their low standard deviation. The last option I tried was using a coercion method, such as capping the upper limit at a max total_rating of 10. Doing so seems to balance keeping the scores in a reasonable range while allowing for variance between each Parent rating by each visitor, especially in the IQR. Total_rating_max10 will be what I use for these models going forward. 
+
+When applying a sqrt() or log() transformation, the total_ratings preserve their rank order but we also get the effect that the original total_ratings that were not outliers originally become much closer to each other. We can see this effect by observing the middle 50% range of values, or interquartile range (IQR), in the output below. There's a much tighter range of values for the scale transformed ratings (square-root and lognormal), whereas simply coercing the outliers to an upper boundary like total_rating_max10, still preserves the variance in the middle 50% range of ratings values as the original, but highly skewed total_rating. 
+
+``` {r}
+library(purrr)
+map_dfr(user_ratings[3:6], IQR) # calculate the IQR for each total rating method
+```
+
+
+We can also look at the standard deviation for each of the 4 different total_ratings too. Naturally, the raw total_ratings will have the largest standardized variance b/c of its extreme right-skew. The standard variance of each total rating reflects the same insights from the IQR values. Total_rating_max10 seems to balance keeping the scores in a reasonable range and handling outliers while still preserving a lot of the variance  between any item rating. 
+
+Total_rating_max10 will be what I use initially to explore collaborative filtering. 
 
 ``` {r echo = TRUE}
-library(purrr)
-map_dbl(user_ratings[3:6], sd) # get the standard deviation for each total_rating type.
+map_dfr(user_ratings[3:6], sd) # get the standard deviation for each total tating method
 ```
 
 ### Setting up a User Ratings Matrix
 
-We're at the point now where we have a dataset where each row represents the total_rating of a specific item (Parent) made by a specific VisitorID. 
+We're at the point now where we have a dataset where each row represents the total_rating of a specific item (Parent) made by a specific VisitorID. A reminder of what these primary columns of interest look like in our current dataset:
 
 ``` {r echo = TRUE}
-sample_n(user_ratings[,1:3], 10) %>%
+sample_n(user_ratings[,c(1:2, 6)], 20) %>%
   kable(align = 'c')
 
 ```
@@ -782,7 +794,46 @@ For collaborative filtering recommender systems, the recommendations are largely
 * a) finding similar users who've rated the same items similarly to me. This method addresses a recommendation hypothesis of "what other users are like me, and what items do they purchase?" This is known as **user-based collaborative filtering**. It finds users who have similar interest in items as you and recommends new items based on a weighted formula of what they rate highly that you haven't yet looked at or purchased. 
 
 * b) We can also make recommendations by finding items that are similarly rated to the ones that a user has rated. In this case, neighborhoods are defined not by similar users but by items with similar ratings pattern across users. These item similarity measures are then compared to the items the user has already rated. This is known as **item-based collaborative filtering**. It addresses a recommendation hypothesis of "people who liked this also tend to like this" or "What items are most similar to the ones that I’ve purchased that may interest me?" 
+  
+
+## recommenderlab
+
+Since we'll be working initially with action ratings, and not binary ratings (1,0), we'll use the `realRatingMatrix` class of objects from `recommenderlab`. Some of the methods we can apply to objects of this class are output below. 
+
+``` {r echo = TRUE}
+library(recommenderlab)
+methods(class = "realRatingMatrix")
+
+```
+  
+For now, we'll primarily need to convert our sparse matrix, **sparse_r** into a realRatingMatrix object, which is a pre-processing step for building recommender systems with this package. 
+
+``` {r echo = TRUE}
+# coerce our sparseMatrix, sparse_r into a realRatingMatrix object
+real_r <- as(sparse_r, "realRatingMatrix")
+real_r
+
+
+# str(real_r)
+# attributes(real_r)
+```
+
+With `r nrow(real_r) * ncol(real_r)` total cells in this realRatingMatrix, and only `r sum(rowCounts(real_r))` total ratings within these cells, the percent of non-missing entries in our matrix is `r round(sum(rowCounts(real_r)) / (nrow(real_r) * ncol(real_r)), 5) * 100`%. Therefore, the sparsity of the matrix is `r 100 - round(sum(rowCounts(real_r)) / (nrow(real_r) * ncol(real_r)), 5) * 100`%. 
+
+A preview of what this realRatingMatrix looks like for a handful of random rows (users) and columns (items). We see no ratings for this small slice of the matrix. 
+
+``` {r echo = TRUE}
+getRatingMatrix(real_r[1:10, 1:5])
+
+```
+
+Now that we have a realRatingMatrix object, we can focus on identifying what algorithms we want to explore for collaborative filtering. 
 
 ## User Based Collaborative Filtering
+
+
+with the evaluationScheme(), which 
+
+
 
 ## Item Based Collaborative Filtering
