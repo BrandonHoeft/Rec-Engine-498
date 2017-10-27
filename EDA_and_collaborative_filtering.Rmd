@@ -509,6 +509,7 @@ user_items %>%
     scale_y_continuous(labels=scales::percent)
 
 ```
+
 ``` {r}
 user_items %>%
   group_by(ActionId, ActionId_label) %>%
@@ -886,21 +887,34 @@ With `r nrow(real_r_filtered) * ncol(real_r_filtered)` total cells in this realR
 
 ### Create a train and test modeling scheme
 
-Here, we'll train 5 different user-based collaborative filtering models, each with a different set of parameters. The model will be evaluated based on the classification accuracy (ex. True Positive Rate, False Positive Rate) for different top-N recommended items in the test set. Instead of a simple training and test sample, we'll use 5-fold cross-validation. This will enable all of the user rows to contribute towards model testing in one of its folds. In other words, all `r nrow(real_r_filtered)` user vectors of ratings will contribute towards the model test performance during 1 of 5 train/test iterations. This takes about 2 minutes to run on these data.
+Here, we'll train 5 different user-based collaborative filtering models, each with a different set of parameters. The model will be evaluated based on the classification accuracy (ex. True Positive Rate, False Positive Rate) for different top-N recommended items in the test set. *Instead of a simple training and test sample, we'll use 5-fold cross-validation. This will enable all of the user rows to contribute towards model testing in one of its folds. In other words, all `r nrow(real_r_filtered)` user vectors of ratings will contribute towards the model test performance during 1 of 5 train/test iterations. This takes about 2 minutes to run on these data.* Actually, for now will use a simple training/testing scheme for computational ease, with a holdout sample of 20% of the users. 
+
 
 ``` {r eval = FALSE, echo = TRUE}
-set.seed(2017)
-ubcf_scheme <- evaluationScheme(real_r_filtered,
-                                method = "cross-validation",
-                                k = 5,
-                                given = 10,  # how many records for a test user will learn the model? Remainder used for evaluating predictions. 
-                                goodRating = 3) # threshold for classification. Median Total_rating_max10.
 
+#set.seed(2017)
+#ubcf_single_test_scheme <- evaluationScheme(real_r_filtered,
+#                                method = "split", # random train/test scheme
+#                                train = 0.8,
+#                                k = 1,
+#                                given = 10,  # how many records for a test user will learn the model? Remainder used for evaluating predictions. 
+#                                goodRating = 3) # threshold for classification. Median Total_rating_max10.
 
+# s3save(ubcf_single_test_scheme, bucket = "pred498team5", object = "ubcf_single_test_scheme.Rdata")
+s3load("ubcf_single_test_scheme.Rdata", bucket = "pred498team5")
+ubcf_single_test_scheme
+
+# 5-fold CV Scheme -------------------------------------------------------------
+#set.seed(2017)
+#ubcf_scheme <- evaluationScheme(real_r_filtered,
+#                                method = "cross-validation",
+#                                k = 5,
+#                                given = 10,  # how many records for a test user will learn the model? Remainder used for evaluating predictions. 
+#                                goodRating = 3) # threshold for classification. Median Total_rating_max10.
 #s3save(ubcf_scheme, bucket = "pred498team5", object = "ubcf_scheme.Rdata")
-#s3load("user_items.Rdata", bucket = "pred498team5")
+#s3load("ubcf_scheme.Rdata", bucket = "pred498team5")
+#ubcf_scheme
 
-ubcf_scheme
 ```
   
 
