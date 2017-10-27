@@ -887,7 +887,9 @@ With `r nrow(real_r_filtered) * ncol(real_r_filtered)` total cells in this realR
 
 ### Create a train and test modeling scheme
 
-Here, we'll train 5 different user-based collaborative filtering models, each with a different set of parameters. The model will be evaluated based on the classification accuracy (ex. True Positive Rate, False Positive Rate) for different top-N recommended items in the test set. *Instead of a simple training and test sample, we'll use 5-fold cross-validation. This will enable all of the user rows to contribute towards model testing in one of its folds. In other words, all `r nrow(real_r_filtered)` user vectors of ratings will contribute towards the model test performance during 1 of 5 train/test iterations. This takes about 2 minutes to run on these data.* Actually, for now will use a simple training/testing scheme for computational ease, with a holdout sample of 20% of the users. 
+Here, we'll train 5 different user-based collaborative filtering models, each with a different set of parameters. The model will be evaluated based on the classification accuracy (ex. True Positive Rate, False Positive Rate) for different top-N recommended items in the test set. *Instead of a simple training and test sample, we'll use 5-fold cross-validation. This will enable all of the user rows to contribute towards model testing in one of its folds. In other words, all `r nrow(real_r_filtered)` user vectors of ratings will contribute towards the model test performance during 1 of 5 train/test iterations. This takes about 2 minutes to run on these data.* 
+
+Actually, for now will use a simple training/testing scheme for computational ease, with a holdout sample of 20% of the users. We'll see how that goes :) 
 
 
 ``` {r eval = FALSE, echo = TRUE}
