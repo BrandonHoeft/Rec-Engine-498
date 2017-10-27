@@ -294,7 +294,7 @@ user_items %>%
 After careful consideration, we have determined that total actions per PartNumber or per Parent within a single user session should not influence the implicit rating derived for the recommender. This could be for a variety of reasons, but primarily because there's not a strong theoretical basis that repeating an action in a single session with an item is an endorsement of that item. For example, selecting a part multiple times in the same session may perhaps be just as indicative of uncertainty or confusion as it could be of an interest in the item. 
   
   
-### How many unique PartNumbers is each visitor interacting with? 
+### How many different PartNumbers is each visitor interacting with? 
 
 
 ``` {r echo = TRUE}
@@ -309,9 +309,9 @@ user_items %>%
              color = "black", linetype = "dashed", size = 0.5) +
   geom_text(aes(0,.002, family = "courier", label = paste("median = ", median(unique_part_count))), 
             nudge_x = 600, color = "black", size = 4.5) +
-  labs(title = 'Distribution of how many PartNumbers each Visitor interacted with',
+  labs(title = 'How many PartNumbers each Visitor interacted with',
        subtitle = 'binwidth of 100',
-       x = 'Unique PartNumbers per Visitor')
+       x = 'Different PartNumbers per Visitor')
 
 ```
 
@@ -326,7 +326,7 @@ user_items %>%
 ```
   
   
-### How many unique Parents are visitors interacting with? 
+### How many different Parents are visitors interacting with? 
 
 Instead of looking at the distinct PartNumbers that each visitor interacts with, we can also look at the Parent category that each PartNumber rolls up to. By reducing the diversity of different products from the specific PartNumber to the Parent category they roll up to, we'd expect the count of interactions with unique Parents to decrease. However, this may improve the sparsity problem of a recommender system. 
 
@@ -343,22 +343,23 @@ user_items %>%
              color = "black", linetype = "dashed", size = 0.5) +
   geom_text(aes(0,.004, family = "courier", label = paste("median = ", median(unique_parent_count))), 
             nudge_x = 300, color = "black", size = 4.5) +
-  labs(title = 'Distribution of how many Parent categories each Visitor interacted with',
+  labs(title = 'How many Parent categories each Visitor interacted with',
        subtitle = 'binwidth of 50',
-       x = 'Unique Parent category per Visitor')
+       x = 'Parent categories per Visitor')
 ```
 
 ``` {r}
-
-user_items %>%
+different_parent_per_user_summary <- user_items %>%
   group_by(VisitorId) %>%
   distinct(Parent) %>% # only keep distinct parent per visitor.
   summarize(unique_parent_count = n()) %>% # get count within the group. 
   with(summary(unique_parent_count))
+
+different_parent_per_user_summary
 ```
   
   
-### How many unique visitors have interacted with each PartNumber? 
+### How many Different Visitors have interacted with each PartNumber? 
 
 The following summary stats distribution is potentially problematic. We have a very high dimensional dataset (more PartNumbers than users). So while each user appears to be interacting with quite a few PartNumbers as indicated by previous graphs, this graph shows that for any given PartNumber, there are typically only a handful of different visitors who have explored the exact same PartNumber. 
 ``` {r echo = TRUE}
@@ -374,26 +375,26 @@ user_items %>%
              color = "black", linetype = "dashed", size = 0.5) +
   geom_text(aes(0,.04, family = "courier", label = paste("median = ", median(unique_users_count))), 
             nudge_x = 60, color = "black", size = 4.5) +
-  labs(title = 'Distribution of Unique Visitors for each PartNumber',
+  labs(title = 'Distribution of Number of Different Visitors going each PartNumber',
        subtitle = 'binwidth of 10',
-       x = 'Unique Visitors per PartNumber (upper limit coerced to 500)')
+       x = 'Different Visitors per PartNumber (upper limit coerced to 500)')
 ```
 
 ``` {r}
-temp1 <- user_items %>%
+different_visitors_per_partnumber_summary <- user_items %>%
   group_by(PartNumber) %>%
   distinct(VisitorId) %>% # only keep distinct visitors per Item.
   summarize(unique_users_count = n()) %>%
   with(summary(unique_users_count))
-temp1
+different_visitors_per_partnumber_summary
 
 ```
   
   
-Typically, on median, there are `r temp1[3]` unique visitors who've visited the same specific PartNumber, for the `r unique(user_items$PartNumber) %>% length()` PartNumber categories.
+Typically, on median, there are `r different_visitors_per_partnumber_summary[3]` different visitors who've visited the same PartNumber, for the `r unique(user_items$PartNumber) %>% length()` PartNumber categories.
   
   
-### How many unique visitors have interacted with each Parent Family? 
+### How many Different Visitors have interacted with each Parent Family? 
 
 Because Parent Family's are a broader generalization than PartNumbers, we expect to have more interactions within a single Parent Family by multiple users than at the very specific PartNumber level. The summary statistics and distributions provided below reflect that when the dimensionality of the items is rolled up from the granular PartNumber level to the more general Parent category, we get more users who have looked at the same item.  
 
@@ -410,27 +411,26 @@ user_items %>%
              color = "black", linetype = "dashed", size = 0.5) +
   geom_text(aes(0, .005, family = "courier", label = paste("median = ", median(unique_users_count))),
             nudge_x = 300, color = "black", size = 4.5) +
-  labs(title = 'Distribution of Unique Visitors for each Parent Family',
+  labs(title = 'Distribution of Number of Different Visitors for each Parent Family',
        subtitle = 'binwidth of 50',
-       x = 'Unique Visitors per PartNumber (upper limit coerced to 2000)')
+       x = 'Different Visitors per Parent (upper limit coerced to 2000)')
 ```
 
 ``` {r}
-temp2 <- user_items %>%
+different_visitors_per_parent_summary <- user_items %>%
   group_by(Parent) %>%
   distinct(VisitorId) %>% # only keep distinct visitors per Item.
   summarize(unique_users_count = n()) %>%
   with(summary(unique_users_count))
-temp2
+different_visitors_per_parent_summary
 ```
   
   
-Typically, on median, there are `r temp2[3]` unique visitors who've visited the same Parent category, of the `r unique(user_items$Parent) %>% length()` Parent categories. 
+Typically, on median, there are `r different_visitors_per_parent_summary[3]` different visitors who've visited the same Parent category, of the `r unique(user_items$Parent) %>% length()` Parent categories. 
 
-This is `r round(temp2[3] / temp1[3], 1)` times more unique visitors per item when looking at items from the Parent category perspective than at the most granular PartNumber perspective. Perhaps it may make more sense to model recommendations at the Parent level instead of at the PartNumber level, given these differences in how many unique users are looking at identical PartNumbers versus identical Parent categories. 
+This represents `r round(different_visitors_per_parent_summary[3] / different_visitors_per_partnumber_summary[3], 1)` times more different visitors per Parent than per PartNumber. Perhaps it may make more sense to model recommendations at the Parent level instead of at the PartNumber level, given these differences in how many unique users are looking at identical PartNumbers versus identical Parent categories. 
 
-However, we see a bit of a presence of fat tail. The max number of unique visitors per Parent category is `r temp2[6]`, which means that for at least 1 outlier parent category, `r round(temp2[6] / unique(user_items$Parent) %>% length(), 2) * 100`% of unique users have interacted with the same product. This is very important in the collaborative filtering setting.
-  
+However, we see a bit of a presence of fat tail. The max number of different visitors per Parent category is `r different_visitors_per_parent_summary[6]`, which means that for at least 1 outlier parent category, `r round(different_visitors_per_parent_summary[6] / unique(user_items$Parent) %>% length(), 2) * 100`% of different users have interacted with the same parent category. This is important to know in the collaborative filtering setting, as popular items have the potential to heavily influence identification of similar users and items, which can bias new recommendations towards more popular items. 
   
 #### Impact of Long Tail Distributions
 
@@ -826,8 +826,39 @@ A preview of what this realRatingMatrix looks like for a handful of random rows 
 getRatingMatrix(real_r[1:10, 1:5])
 
 ```
+  
+## Improving the Sparsity Problem
 
-Now that we have a realRatingMatrix object, we can focus on identifying what algorithms we want to explore for collaborative filtering. 
+Some users and items in this dataset are primary culprits contributing the sparsity in our matrix, such as users who maybe only rated one item in the entire 7-month period of the dataset. 
+
+From a practical perspective, it probably does not makes sense to keep users from this matrix who have close to 0 interactions with items. 
+
+From a modeling perspective, it will be hard to learn from these sparse user vectors and almost impossible to use them as part of any holdout dataset because there will not be enough item ratings to both learn their similarity to other users or items from and also enough remaining item ratings to use for predicting test error. This is where some of our prior EDA will help us out. Specifically, the EDA plots and summary stats sections of this analysis that looked at the questions of "How many different Parents are visitors interacting with?" and "How many Different Visitors have interacted with each Parent Family?" will help us to subset the realRatingMatrix. This will enable us to arrive at a viable reference population for training and testing candidate collaborative filtering models. 
+
+Based on the EDA, we'll use 1st quartile (25th percentile) values as cutoffs for getting into the realRatingMatrix for fitting and evaluating a model. Specifically:
+
+* **User threshold**: The user has to have had at least `r different_parent_per_user_summary[2]` ratings of different items (Parents). This reflects the 25th percentile of user interactions with different Parent categories. 
+
+* **Item threshold**: The item has to have had at least `r different_visitors_per_parent_summary[2]` different users who have interacted with that item (Parent). This reflects the 25th percentile of the number of different visitors per parent category. 
+
+We can simply use matrix subsetting to filter our realRatingMatrix to drop out the 25% most sparse row and column entries.
+
+``` {r echo =TRUE}
+
+
+```
+
+
+Now that we have a realRatingMatrix object, we can focus on identifying what algorithms we want to explore for collaborative filtering. To start, we'll focus on tuning 2 popular collaborative filtering algorithms, **UBCF_realRatingMatrix** and **IBCF_realRatingMatrix**. Brief descriptions of these algorithms and their default tuning parameters are illustrated below. 
+
+``` {r echo = TRUE}
+# types of collaborative filtering algorithms
+# recommenderRegistry$get_entries(dataType = "realRatingMatrix")
+recommenderRegistry$get_entries(dataType = "realRatingMatrix")$UBCF_realRatingMatrix 
+recommenderRegistry$get_entries(dataType = "realRatingMatrix")$IBCF_realRatingMatrix 
+
+
+```
 
 ## User Based Collaborative Filtering
 
