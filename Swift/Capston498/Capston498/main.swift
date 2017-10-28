@@ -141,7 +141,7 @@ private func itemToParentMap(_ items: [Item]) -> [String: String] {
     return map
 }
 
-private func sortActivities(_ activities: inout [Activity]) {
+private func sortActivitiesByVisitorDateParent(_ activities: inout [Activity]) {
     log("sortActivities start")
 
     activities.sort(by: { one, two in
@@ -158,6 +158,19 @@ private func sortActivities(_ activities: inout [Activity]) {
 
 }
 
+private func sortActivitiesByVisitorParent(_ activities: inout [Activity]) {
+    log("sortActivities start")
+    
+    activities.sort(by: { one, two in
+        if one.visitorId == two.visitorId {
+            return one.parent < two.parent
+        }
+        return one.visitorId < two.visitorId
+    })
+    log("sortActivities end")
+    
+}
+
 private func log(_ message: String) {
     let dateFormatter : DateFormatter = DateFormatter()
     dateFormatter.dateFormat = "HH:mm:ss"
@@ -166,8 +179,10 @@ private func log(_ message: String) {
     print("\(message) at \(dateString)")
 }
 
-private func massageForHighestParentActivityPerDay(_ activities: [Activity]) -> [Activity] {
+private func massageForHighestParentActivityPerDay(_ activities: inout [Activity]) -> [Activity] {
     log("massageForHighestParentActivityPerDay start")
+
+    sortActivitiesByVisitorDateParent(&activities)
 
     var filteredActivities: [Activity] = []
     var visitorId: Int64 = -1
@@ -213,26 +228,53 @@ private func massageForHighestParentActivityPerDay(_ activities: [Activity]) -> 
     return filteredActivities
 }
 
-private func assignRatingsForAnyActivity(activities: [Activity]) -> [Activity] {
-    log("assignRatingsForAnyActivity start")
-
-    var ratingActivities: [Activity] = []
-    //2 * ln(x + 1)
-    let uniqueVisitorIds = Set(activities.map() {$0.visitorId})
+private func assignRatingsForActivityTypeWeight(activities: inout [Activity]) -> [Activity] {
+    log("assignRatingsForActivityTypeWeight start")
+    
+    sortActivitiesByVisitorParent(&activities)
+    
     var counter = 1
-    let total = uniqueVisitorIds.count
-    for visitorId in uniqueVisitorIds {
-        let acts = activities.filter({$0.visitorId == visitorId})
-        let uniqueParents = Set(acts.map() {$0.parent})
-        for parent in uniqueParents {
-            let parentCount = acts.filter({$0.parent == parent}).count
-            let ratingActivity = Activity()
-            ratingActivity.visitorId = visitorId
-            ratingActivity.parent = parent
-            ratingActivity.count = parentCount
-            ratingActivity.rating = round((2 * log(Double(parentCount + 1))) * 10)/10
-            if ratingActivity.rating! > 10 {ratingActivity.rating = 10}
-            ratingActivities.append(ratingActivity)
+    let total = activities.count
+    
+    var ratedActivities: [Activity] = []
+    var visitorId: Int64 = -1
+    var parent: String = ""
+    var anyCount: Int = -1
+    var weightedCount: Double = -1
+    for activity in activities {
+        if activity.visitorId == visitorId, activity.parent == parent {
+            // do nada
+        } else if visitorId != -1 {
+            let ratedActivity = Activity()
+            ratedActivity.count = anyCount
+            ratedActivity.countWeighted = weightedCount
+            ratedActivity.rating =  round((2 * log(Double(anyCount + 1))) * 10)/10
+            ratedActivity.ratingWeighted = round((2 * log(Double(weightedCount + 1))) * 10)/10
+            ratedActivity.parent = parent
+            ratedActivity.visitorId = visitorId
+            ratedActivities.append(ratedActivity)
+            
+            visitorId = activity.visitorId
+            parent = activity.parent
+            anyCount = 0
+            weightedCount = 0
+        } else {
+            visitorId = activity.visitorId
+            parent = activity.parent
+            anyCount = 0
+            weightedCount = 0
+        }
+        
+        anyCount += 1
+        switch activity.type {
+        case 1:
+            weightedCount += 1
+        case 2:
+            weightedCount += 1.5
+        case 3:
+            weightedCount += 3
+        default:
+            break
         }
         
         if counter % 2000 == 0 {
@@ -240,54 +282,18 @@ private func assignRatingsForAnyActivity(activities: [Activity]) -> [Activity] {
         }
         counter += 1
     }
-    
-    log("assignRatingsForAnyActivity start")
-
-    return ratingActivities
-}
-
-private func assignRatingsForActivityTypeWeight(activities: [Activity]) -> [Activity] {
-    log("assignRatingsForActivityTypeWeight start")
-    
-    var ratingActivities: [Activity] = []
-    //2 * ln(x + 1)
-    let uniqueVisitorIds = Set(activities.map() {$0.visitorId})
-    var counter = 1
-    let total = uniqueVisitorIds.count
-    for visitorId in uniqueVisitorIds {
-        let acts = activities.filter({$0.visitorId == visitorId})
-        let uniqueParents = Set(acts.map() {$0.parent})
-        for parent in uniqueParents {
-            let parentCount = acts.filter({$0.parent == parent}).count
-            
-            let onesCount = acts.filter({$0.parent == parent && $0.type == 1}).count
-            let twosCount = acts.filter({$0.parent == parent && $0.type == 2}).count
-            let threesCount = acts.filter({$0.parent == parent && $0.type == 3}).count
-            
-            let weightedCount = Double(onesCount) + Double(twosCount) * 1.5 + Double(threesCount) * 3.0
-
-            let ratingActivity = Activity()
-            ratingActivity.visitorId = visitorId
-            ratingActivity.parent = parent
-            ratingActivity.count = parentCount
-            ratingActivity.countWeighted = weightedCount
-            ratingActivity.rating = round((2 * log(Double(parentCount + 1))) * 10)/10
-            ratingActivity.ratingWeighted = round((2 * log(Double(weightedCount + 1))) * 10)/10
-            if ratingActivity.rating! > 10 {ratingActivity.rating = 10}
-            if ratingActivity.ratingWeighted! > 10 {ratingActivity.ratingWeighted = 10}
-
-            ratingActivities.append(ratingActivity)
-        }
-        
-        if counter % 2000 == 0 {
-            print("processed \(counter) of \(total) unqiue visitors")
-        }
-        counter += 1
-    }
+    let ratedActivity = Activity()
+    ratedActivity.count = anyCount
+    ratedActivity.countWeighted = weightedCount
+    ratedActivity.rating =  round((2 * log(Double(anyCount + 1))) * 10)/10
+    ratedActivity.ratingWeighted = round((2 * log(Double(weightedCount + 1))) * 10)/10
+    ratedActivity.parent = parent
+    ratedActivity.visitorId = visitorId
+    ratedActivities.append(ratedActivity)
     
     log("assignRatingsForActivityTypeWeight start")
     
-    return ratingActivities
+    return ratedActivities
 }
 
 private func writeActivitiesToFile(fileName: String, activities: [Activity]) {
@@ -365,9 +371,8 @@ do {
     if play {fileName = "obfuscatedWebActivity1024play.csv"}
     var activities = try processActivityFile("/Users/haydude/Development/mspa/498 - Capstone/data/10-24 run/\(fileName)")
     
-    sortActivities(&activities)
     
-    let highestActivitiesPerDay = massageForHighestParentActivityPerDay(activities)
+    var highestActivitiesPerDay = massageForHighestParentActivityPerDay(&activities)
     
     activities = []
     
@@ -377,7 +382,7 @@ do {
     
     //writeRatedActivitiesToFile(fileName: "webActivityAnyRated", activities: ratedAnyActivities)
     
-    let ratedWeightedActivities = assignRatingsForActivityTypeWeight(activities: highestActivitiesPerDay)
+    let ratedWeightedActivities = assignRatingsForActivityTypeWeight(activities: &highestActivitiesPerDay)
     
     writeRatedActivitiesToFile(fileName: "webActivityRated", activities: ratedWeightedActivities)
 
