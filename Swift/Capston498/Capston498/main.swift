@@ -13,7 +13,7 @@ print("Hello, World!")
 let stderr = FileHandle.standardError
 let stdout = FileHandle.standardOutput
 var partNumberParentMap: [String:String] = [:]
-let play = true
+let play = false
 
 enum ActivityType: Int {
     case select = 1
@@ -61,8 +61,9 @@ class Activity {
     var date: Int = -1
     var count: Int = -1
     var rating: Double?
-    var weightedCount: Double?
-    
+    var countWeighted: Double?
+    var ratingWeighted: Double?
+
     init() {}
     
     init?(_ line: String) {
@@ -257,6 +258,8 @@ private func assignRatingsForActivityTypeWeight(activities: [Activity]) -> [Acti
         let acts = activities.filter({$0.visitorId == visitorId})
         let uniqueParents = Set(acts.map() {$0.parent})
         for parent in uniqueParents {
+            let parentCount = acts.filter({$0.parent == parent}).count
+            
             let onesCount = acts.filter({$0.parent == parent && $0.type == 1}).count
             let twosCount = acts.filter({$0.parent == parent && $0.type == 2}).count
             let threesCount = acts.filter({$0.parent == parent && $0.type == 3}).count
@@ -266,8 +269,10 @@ private func assignRatingsForActivityTypeWeight(activities: [Activity]) -> [Acti
             let ratingActivity = Activity()
             ratingActivity.visitorId = visitorId
             ratingActivity.parent = parent
-            ratingActivity.weightedCount = weightedCount
-            ratingActivity.rating = round((2 * log(Double(weightedCount + 1))) * 10)/10
+            ratingActivity.count = parentCount
+            ratingActivity.countWeighted = weightedCount
+            ratingActivity.rating = round((2 * log(Double(parentCount + 1))) * 10)/10
+            ratingActivity.ratingWeighted = round((2 * log(Double(weightedCount + 1))) * 10)/10
             if ratingActivity.rating! > 10 {ratingActivity.rating = 10}
             ratingActivities.append(ratingActivity)
         }
@@ -324,19 +329,14 @@ private func writeRatedActivitiesToFile(fileName: String, activities: [Activity]
     // If the directory was found, we write a file to it and read it back
     if let fileURL = dir?.appendingPathComponent(fileName).appendingPathExtension("csv") {
         
-        var output: [String] = ["VisitorId,Parent,ActionCount,Rating\n"]
+        var output: [String] = ["VisitorId,Parent,AnyCount,AnyRating,WeightedCount,WeightedRating\n"]
         activities.map({activity in
-            if activity.weightedCount == nil {
-                return "\(activity.visitorId),\(activity.parent),\(activity.count),\(activity.rating ?? -1)\n"
+            let isInteger = (activity.countWeighted ?? 0).truncatingRemainder(dividingBy: 1) == 0
+            
+            if isInteger {
+                return "\(activity.visitorId),\(activity.parent),\(activity.count),\(activity.rating ?? 0),\(Int(activity.countWeighted ?? 0)),\(activity.ratingWeighted ?? -1)\n"
             } else {
-                let isInteger = (activity.weightedCount ?? 0).truncatingRemainder(dividingBy: 1) == 0
-
-                if isInteger {
-                    return "\(activity.visitorId),\(activity.parent),\(Int(activity.weightedCount ?? 0)),\(activity.rating ?? -1)\n"
-                } else {
-                    return "\(activity.visitorId),\(activity.parent),\(activity.weightedCount ?? 0),\(activity.rating ?? -1)\n"
-                }
-                
+                return "\(activity.visitorId),\(activity.parent),\(activity.count),\(activity.rating ?? 0),\(activity.countWeighted ?? 0),\(activity.ratingWeighted ?? -1)\n"
             }
         }).forEach() {
             output.append($0)
@@ -377,7 +377,7 @@ do {
     
     let ratedWeightedActivities = assignRatingsForActivityTypeWeight(activities: highestActivitiesPerDay)
     
-    writeRatedActivitiesToFile(fileName: "webActivityWeightedRated", activities: ratedWeightedActivities)
+    writeRatedActivitiesToFile(fileName: "webActivityRated", activities: ratedWeightedActivities)
 
     
 } catch {
