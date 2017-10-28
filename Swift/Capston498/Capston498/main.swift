@@ -277,8 +277,8 @@ private func assignRatingsForActivityTypeWeight(activities: inout [Activity]) ->
             break
         }
         
-        if counter % 2000 == 0 {
-            print("processed \(counter) of \(total) unqiue visitors")
+        if counter % 1000000 == 0 {
+            print("processed \(counter) of \(total) activities")
         }
         counter += 1
     }
