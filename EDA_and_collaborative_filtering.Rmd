@@ -215,7 +215,6 @@ weekly_activity %>%
 The number of different PartNumbers interacted with each week by users in this dataset distributes as indicated by the following summary statistics. 
 
 ``` {r echo = TRUE}
-library(knitr)
 weekly_activity %>%
   summarize(minimum = min(PartNumbers_count),
             First_Quartile = quantile(PartNumbers_count, .25),
@@ -230,7 +229,6 @@ weekly_activity %>%
 The number of different Parent categories interacted with each week in this dataset distributes as indicated by the following summary statistics.  
 
 ``` {r echo = TRUE}
-library(knitr)
 weekly_activity %>%
   summarize(minimum = min(Parent_category_count),
             First_Quartile = quantile(Parent_category_count, .25),
@@ -828,6 +826,18 @@ getRatingMatrix(real_r[1:10, 1:5])
 
 ```
   
+## Sample the data
+
+To improve computation time for this very large matrix, we'll take a random sample of 50% of the user rows in the realRatingMatrix.
+
+``` {r echo = TRUE}
+set.seed(2017)
+keep_index <- sample(seq_len(nrow(real_r)), size = nrow(real_r) * 0.50, replace = FALSE)
+real_r_sampled <- real_r[keep_index, ]
+
+real_r_sampled
+```
+
 ## Improving the Sparsity Problem
 
 Some users and items in this dataset are primary culprits contributing the sparsity in our matrix, such as users who maybe only rated one item in the entire 7-month period of the dataset. 
@@ -838,14 +848,13 @@ From a modeling perspective, it will be hard to learn from these sparse user vec
 
 Based on the EDA, we'll use 1st quartile (25th percentile) values as cutoffs for getting into the realRatingMatrix for fitting and evaluating a model. Specifically:
 
-* **User threshold**: The user has to have had at least `r different_parent_per_user_summary[2]` ratings of different items (Parents). This reflects the 25th percentile of user interactions with different Parent categories. 
+* **User threshold**: The user has to have had at least `r different_parent_per_user_summary[2]` ratings of different items (Parents). This reflects the median user interactions with different Parent categories. 
 
-* **Item threshold**: The item has to have had at least `r different_visitors_per_parent_summary[2]` different users who have interacted with that item (Parent). This reflects the 25th percentile of the number of different visitors per parent category. 
-
+* **Item threshold**: The item has to have had at least 2 different users who have interacted with that item (Parent). 
 We can simply use matrix subsetting using the rowCounts() and colCounts() functions within recommenderLab to apply these rules for sparsity reduction and ensuring that each user has enough test items available for learning the model and evaluating predicted top N items. Let's look at how many users were dropped as a result of this. 
 
 ``` {r echo =TRUE}
-real_r_filtered <- real_r[rowCounts(real_r) >= different_parent_per_user_summary[2], ] # thirty
+real_r_filtered <- real_r_sampled[rowCounts(real_r_sampled) >= different_parent_per_user_summary[2], ] # 30
 nrow(real_r_filtered) - nrow(real_r)
 summary(rowCounts(real_r_filtered))
 
@@ -856,7 +865,7 @@ As a result of this, we have `r nrow(real_r_filtered) - nrow(real_r)` fewer user
 Now also apply the subsetting rules for items.
 
 ``` {r echo = TRUE}
-real_r_filtered <- real_r_filtered[, colCounts(real_r_filtered) >= different_visitors_per_parent_summary[2],] # eighteen
+real_r_filtered <- real_r_filtered[, colCounts(real_r_filtered) > 1]
 
 summary(colCounts(real_r_filtered))
 
@@ -872,7 +881,8 @@ class(real_r_filtered)
 ```
 
 With `r nrow(real_r_filtered) * ncol(real_r_filtered)` total cells in this realRatingMatrix, and `r sum(rowCounts(real_r_filtered))` total ratings within these cells, the percent of non-missing entries in our reduced matrix is `r real_r_filtered_non_missing_percent`%. We improved our non-missing entries by about `r round((real_r_filtered_non_missing_percent - real_r_non_missing_percent) / real_r_non_missing_percent, 2) * 100`%, although our missingness is still very high. 
-
+  
+  
 ## User Based Collaborative Filtering
   
 
@@ -895,15 +905,15 @@ Actually, for now will use a simple training/testing scheme for computational ea
 ``` {r eval = FALSE, echo = TRUE}
 
 #set.seed(2017)
-#ubcf_single_test_scheme <- evaluationScheme(real_r_filtered,
-#                                method = "split", # random train/test scheme
-#                                train = 0.8,
-#                                k = 1,
-#                                given = 10,  # how many records for a test user will learn the model? Remainder used for evaluating predictions. 
-#                                goodRating = 3) # threshold for classification. Median Total_rating_max10.
+ubcf_single_test_scheme <- evaluationScheme(real_r_filtered,
+                                method = "split", # random train/test scheme
+                                train = 0.8,
+                                k = 1,
+                                given = 20,  # how many records for a test user will learn the model? Remainder used for evaluating predictions. 
+                                goodRating = 4) # threshold for classification. Just above Median Total_rating_max10.
 
 # s3save(ubcf_single_test_scheme, bucket = "pred498team5", object = "ubcf_single_test_scheme.Rdata")
-s3load("ubcf_single_test_scheme.Rdata", bucket = "pred498team5")
+#s3load("ubcf_single_test_scheme.Rdata", bucket = "pred498team5")
 ubcf_single_test_scheme
 
 # 5-fold CV Scheme -------------------------------------------------------------
@@ -955,17 +965,9 @@ ubcf_algorithms <- list(
                             param = list(method = "cosine", 
                                          nn = 25,
                                          normalize = "center")),
-  "ubcf_cosine_50nn" = list(name = "UBCF",
-                            param = list(method = "cosine", 
-                                         nn = 50,
-                                         normalize = "center")),
   "ubcf_pearson_25nn" = list(name = "UBCF",
                             param = list(method = "pearson", 
                                          nn = 25,
-                                         normalize = "center")),
-  "ubcf_pearson_50nn" = list(name = "UBCF",
-                            param = list(method = "pearson", 
-                                         nn = 50,
                                          normalize = "center"))
 )
 ```
@@ -975,10 +977,10 @@ ubcf_algorithms <- list(
 Time to fit the recommender models. The type of model will be a "TopNList" recommender system instead of a "rating" based recommender system. This will allow us to evaluate models on the test data in a classification framework.
 
 ``` {r eval = FALSE, echo = TRUE}
-ubcf_results <- evaluate(ubcf_scheme, 
+ubcf_results <- evaluate(ubcf_single_test_scheme, 
                          ubcf_algorithms, 
                          type = "topNList", 
-                         n = c(3, 5, 10, 15, 20, 25, 30))
+                         n = c(1, 5, 10, 15, 25))
 
 ```
 
