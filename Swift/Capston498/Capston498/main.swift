@@ -274,6 +274,8 @@ private func assignRatingsForActivityTypeWeight(activities: [Activity]) -> [Acti
             ratingActivity.rating = round((2 * log(Double(parentCount + 1))) * 10)/10
             ratingActivity.ratingWeighted = round((2 * log(Double(weightedCount + 1))) * 10)/10
             if ratingActivity.rating! > 10 {ratingActivity.rating = 10}
+            if ratingActivity.ratingWeighted! > 10 {ratingActivity.ratingWeighted = 10}
+
             ratingActivities.append(ratingActivity)
         }
         
