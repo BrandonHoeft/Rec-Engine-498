@@ -906,9 +906,9 @@ Here, we'll train 5 different user-based collaborative filtering models, each wi
 set.seed(2017)
 ubcf_test_scheme <- evaluationScheme(real_r_filtered_sample,
                                method = "split", # random train/test scheme
-                               train = 0.8,
+                               train = 0.75,
                                k = 1,
-                               given = 10,  # how many records for a test user will learn the model? Remainder used for evaluating predictions. 
+                               given = 10,  # how many records from test user to learn the model?
                                goodRating = 3) # threshold for classification. Median Total_rating_max10.
 
 ubcf_test_scheme
@@ -941,27 +941,57 @@ Details about these 4 tuning parameters to account for with this recommender typ
   
 Next, we need to specify the different UBCF algorithms with specified hyper-parameters we want to pass different values for. For now, we'll focus on tuning 2 different similarity **methods** of "cosine" and "pearson". We'll also tune 2 different values of *nn* to start. We'll normalize the ratings per user for all of them. Again, even though these are implicit ratings based on click activity and each user *i*'s max weighted action with each Parent category, each user *i* has their own specific pattern of behavior per session over time, which we may inject a personal behavior bias we want to account for.
 
-``` {r echo = TRUE}
+``` {r eval = FALSE, echo = TRUE}
+
 ubcf_algorithms <- list(
+  "ubcf_cosine_10nn" = list(name = "UBCF",
+                            param = list(method = "cosine", 
+                                         nn = 10,
+                                         normalize = "center")),
   "ubcf_cosine_25nn" = list(name = "UBCF",
                             param = list(method = "cosine", 
                                          nn = 25,
+                                         normalize = "center")),
+  "ubcf_cosine_50nn" = list(name = "UBCF",
+                            param = list(method = "cosine", 
+                                         nn = 50,
+                                         normalize = "center")),
+  "ubcf_pearson_25nn" = list(name = "UBCF",
+                            param = list(method = "pearson", 
+                                         nn = 25,
+                                         normalize = "center")),
+  "ubcf_pearson_50nn" = list(name = "UBCF",
+                            param = list(method = "pearson", 
+                                         nn = 50,
                                          normalize = "center"))
-  )
+)
+
 ```
 
 ### Run the UBCF Models
 
 Time to fit the recommender models. The type of model will be a "TopNList" recommender system instead of a "rating" based recommender system. This will allow us to evaluate models on the test data in a classification framework.
 
-``` {r eval = FALSE, echo = TRUE}
-ubcf_results <- evaluate(ubcf_test_scheme, 
-                         ubcf_algorithms, 
-                         type = "topNList", 
-                         n = c(1,10, 25))
+``` {r echo = TRUE}
+
+# Model1: centered cosine similarity, identifying 10 nearest neighbors.
+ubcf_model1 <- Recommender(data = getData(ubcf_test_scheme, "train"),
+                           method = "UBCF", 
+                           parameter = ubcf_algorithms$ubcf_cosine_10nn$param)
 
 ```
 
+### Predict on test dataset
+
+``` {r echo = TRUE}
+
+ubcf_model1_pred <- predict(ubcf_model1, getData(ubcf_test_scheme, "known"), type = "topNList", n = 10) # top 10 items recommended
+s3save(ubcf_model1_pred, bucket = "pred498team5", object = "ubcf_model1_predRdata")
+#s3load(model1_pred, bucket = "pred498team5", object = "model1_pred.Rdata")
+
+calcPredictionAccuracy(ubcf_model1_pred, getData(ubcf_test_scheme, "unknown"), given = 10, goodRating = 3) 
+
+```
 ## Item Based Collaborative Filtering
 
 ``` {r echo = TRUE}
