@@ -828,15 +828,29 @@ getRatingMatrix(real_r[1:10, 1:5])
   
 ## Sample the data
 
-To improve computation time for this very large matrix, we'll take a random sample of 50% of the user rows in the realRatingMatrix.
+To improve computation time for this very large matrix, we'll take a random sample of 33% of the user rows in the realRatingMatrix.
 
 ``` {r echo = TRUE}
+# Random Sample 33% of the users.
 set.seed(2017)
-keep_index <- sample(seq_len(nrow(real_r)), size = nrow(real_r) * 0.50, replace = FALSE)
-real_r_sampled <- real_r[keep_index, ]
+keep_index <- sample(seq_len(nrow(real_r)), 
+                     size = nrow(real_r) * 0.33, replace = FALSE)
+real_r_sampled_rows <- real_r[keep_index, ]
+real_r_sampled_rows
 
-real_r_sampled
 ```
+  
+We'll also randomly sample 75% of the different Parent categories, just to help improve the computation time a little bit by having fewer columns to make predictions on.
+
+``` {r echo = TRUE}
+# Random Sample 75% of the parent items. 
+set.seed(2017)
+keep_col_index <- sample(seq_len(ncol(real_r)), 
+                         size = ncol(real_r) * 0.75, replace = FALSE)
+real_r_sampled_row_cols <- real_r_sampled_rows[, keep_col_index]
+real_r_sampled_row_cols
+```
+
 
 ## Improving the Sparsity Problem
 
@@ -848,41 +862,57 @@ From a modeling perspective, it will be hard to learn from these sparse user vec
 
 Based on the EDA, we'll use 1st quartile (25th percentile) values as cutoffs for getting into the realRatingMatrix for fitting and evaluating a model. Specifically:
 
-* **User threshold**: The user has to have had at least `r different_parent_per_user_summary[2]` ratings of different items (Parents). This reflects the median user interactions with different Parent categories. 
+* **User threshold**: The user has to have had at least `r different_parent_per_user_summary[3]` ratings of different items (Parents). This reflects the median user interactions with different Parent categories. 
 
-* **Item threshold**: The item has to have had at least 2 different users who have interacted with that item (Parent). 
+* **Item threshold**: The item has to have had at least 5 different users who have interacted with that item (Parent). 
 We can simply use matrix subsetting using the rowCounts() and colCounts() functions within recommenderLab to apply these rules for sparsity reduction and ensuring that each user has enough test items available for learning the model and evaluating predicted top N items. Let's look at how many users were dropped as a result of this. 
 
 ``` {r echo =TRUE}
-real_r_filtered <- real_r_sampled[rowCounts(real_r_sampled) >= different_parent_per_user_summary[2], ] # 30
-nrow(real_r_filtered) - nrow(real_r)
-summary(rowCounts(real_r_filtered))
+# Keep users with a high number of ratings
+real_r_filtered_rows <- real_r_sampled_row_cols[rowCounts(real_r_sampled_row_cols) >= 50, ] # around median from above.
 
 ```
   
-As a result of this, we have `r nrow(real_r_filtered) - nrow(real_r)` fewer users in the matrix. 
+  
+As a result of this, we have `r nrow(real_r_filtered_rows) - nrow(real_r)` fewer users in the matrix. 
   
 Now also apply the subsetting rules for items.
 
 ``` {r echo = TRUE}
-real_r_filtered <- real_r_filtered[, colCounts(real_r_filtered) > 1]
-
-summary(colCounts(real_r_filtered))
+# Keep Parent items with a high number of ratings
+real_r_filtered_rows_cols <- real_r_filtered_rows[, colCounts(real_r_filtered_rows) > 5]
 
 ```
   
-As a result of this, we have `r ncol(real_r_filtered) - ncol(real_r)` fewer items in the dataset. The new dimensions of the updated realRatingMatrix are:
+As a result of this, we have `r ncol(real_r_filtered_rows_cols) - ncol(real_r)` fewer items in the dataset. The new dimensions of the updated realRatingMatrix are:
 
 ``` {r}
-real_r_filtered_non_missing_percent <- round(sum(rowCounts(real_r_filtered)) / (nrow(real_r_filtered) * ncol(real_r_filtered)), 5) * 100
+real_r_filtered_rows_cols
 
-real_r_filtered
-class(real_r_filtered)
+real_r_filtered_non_missing_percent <- round(sum(rowCounts(real_r_filtered_rows_cols)) / (nrow(real_r_filtered_rows_cols) * ncol(real_r_filtered_rows_cols)), 2) * 100
 ```
 
-With `r nrow(real_r_filtered) * ncol(real_r_filtered)` total cells in this realRatingMatrix, and `r sum(rowCounts(real_r_filtered))` total ratings within these cells, the percent of non-missing entries in our reduced matrix is `r real_r_filtered_non_missing_percent`%. We improved our non-missing entries by about `r round((real_r_filtered_non_missing_percent - real_r_non_missing_percent) / real_r_non_missing_percent, 2) * 100`%, although our missingness is still very high. 
+With `r nrow(real_r_filtered_rows_cols) * ncol(real_r_filtered_rows_cols)` total cells in this realRatingMatrix, and `r sum(rowCounts(real_r_filtered_rows_cols))` total ratings within these cells, the percent of non-missing entries in our reduced matrix is `r real_r_filtered_non_missing_percent`%. 
+
+After sampling a subset of users and columns, and then applying filtering criteria to help remove sparse users and items vectors from the matrix, the final distribution of count of ratings per user is:
+
+``` {r}
+summary(rowCounts(real_r_filtered_rows_cols))
+```
   
-  
+The final distribution of the count of different users per parent category is:
+
+``` {r}
+summary(colCounts(real_r_filtered_rows_cols))
+```
+
+The distribution  of user total_ratings_max10 in this final realRatingMatrix prior to modeling is:
+
+``` {r}
+summary(rowMeans(real_r_filtered_rows_cols))
+```
+
+
 ## User Based Collaborative Filtering
   
 
@@ -897,38 +927,24 @@ With `r nrow(real_r_filtered) * ncol(real_r_filtered)` total cells in this realR
 
 ### Create a train and test modeling scheme
 
-Here, we'll train 5 different user-based collaborative filtering models, each with a different set of parameters. The model will be evaluated based on the classification accuracy (ex. True Positive Rate, False Positive Rate) for different top-N recommended items in the test set. *Instead of a simple training and test sample, we'll use 5-fold cross-validation. This will enable all of the user rows to contribute towards model testing in one of its folds. In other words, all `r nrow(real_r_filtered)` user vectors of ratings will contribute towards the model test performance during 1 of 5 train/test iterations. This takes about 2 minutes to run on these data.* 
-
-Actually, for now will use a simple training/testing scheme for computational ease, with a holdout sample of 20% of the users. We'll see how that goes :) 
+Here, we'll train 5 different user-based collaborative filtering models, each with a different set of parameters. The model will be evaluated based on the classification accuracy (ex. True Positive Rate, False Positive Rate) for different top-N recommended items in the test set. Ideally, we'd use k-fold cross-validation as this enables all of the user rows to contribute towards model testing in one of its folds, but it is very computationally expensive. As such, a simple training and test sample will be used, where 75% of the user rows will be for training the recommender algorithms, and a remaining random 25% of the user rows will be used to evaluate the recommender's performance on unseen data. 
 
 
 ``` {r eval = FALSE, echo = TRUE}
 
-#set.seed(2017)
-ubcf_single_test_scheme <- evaluationScheme(real_r_filtered,
+set.seed(2017)
+ubcf_scheme <- evaluationScheme(real_r_filtered_rows_cols,
                                 method = "split", # random train/test scheme
-                                train = 0.8,
+                                train = 0.75,
                                 k = 1,
-                                given = 20,  # how many records for a test user will learn the model? Remainder used for evaluating predictions. 
-                                goodRating = 4) # threshold for classification. Just above Median Total_rating_max10.
-
-# s3save(ubcf_single_test_scheme, bucket = "pred498team5", object = "ubcf_single_test_scheme.Rdata")
-#s3load("ubcf_single_test_scheme.Rdata", bucket = "pred498team5")
-ubcf_single_test_scheme
-
-# 5-fold CV Scheme -------------------------------------------------------------
-#set.seed(2017)
-#ubcf_scheme <- evaluationScheme(real_r_filtered,
-#                                method = "cross-validation",
-#                                k = 5,
-#                                given = 10,  # how many records for a test user will learn the model? Remainder used for evaluating predictions. 
-#                                goodRating = 3) # threshold for classification. Median Total_rating_max10.
-#s3save(ubcf_scheme, bucket = "pred498team5", object = "ubcf_scheme.Rdata")
-#s3load("ubcf_scheme.Rdata", bucket = "pred498team5")
-#ubcf_scheme
-
+                                given = 5,  # how many records for a test user will learn the model? 
+                                goodRating = 3) # threshold for classification. Just above Median Total_rating_max10.
 ```
-  
+
+``` {r eval = TRUE}
+s3load("ubcf_scheme.Rdata", bucket = "pred498team5")
+ubcf_scheme
+```
 
 ### Tuning Parameters for UBCF
 
@@ -953,36 +969,76 @@ Details about these 4 tuning parameters to account for with this recommender typ
   
 ### Create list of UBCF Models
   
-Next, we need to specify the different UBCF algorithms with specified hyper-parameters we want to pass different values for. For now, we'll focus on tuning 2 different similarity **methods** of "cosine" and "pearson". We'll also tune 2 different values of *nn* to start. We'll normalize the ratings per user for all of them. Again, even though these are implicit ratings based on click activity and each user *i*'s max weighted action with each Parent category, each user *i* has their own specific pattern of behavior per session over time, which we may inject a personal behavior bias we want to account for.
+Next, we need to specify the different UBCF algorithms with specified hyper-parameters we want to pass different values for. For now, we'll focus on tuning 2 different similarity **methods** of "cosine" and "pearson" and 2 different values of *nn* to start for a 2 x 2 design. We'll normalize the ratings per user for all of them. Again, even though these are implicit ratings based on click activity and each user *i*'s max weighted action with each Parent category, each user *i* has their own specific pattern of behavior per session over time, which we may inject a personal behavior bias we want to account for.
 
-``` {r echo = TRUE}
-ubcf_algorithms <- list(
-  "ubcf_cosine_10nn" = list(name = "UBCF",
-                            param = list(method = "cosine", 
-                                         nn = 10,
-                                         normalize = "center")),
+A random recommender system, which will make random item predictions to each user in the test set, Additionally, a popular items based recommender will also be created to benchmark against the UBCF models. A popular items based recommender simply analyzes the number of users in the training data who have each *j* item in their profile, and makes top N items recommendations to users in the test dataset based on which were the most popular.
+
+``` {r eval = FALSE, echo = TRUE}
+
+ubcf_algorithms_list <- list(
   "ubcf_cosine_25nn" = list(name = "UBCF",
                             param = list(method = "cosine", 
                                          nn = 25,
                                          normalize = "center")),
+  "ubcf_cosine_50nn" = list(name = "UBCF",
+                            param = list(method = "cosine", 
+                                         nn = 50,
+                                         normalize = "center")),
   "ubcf_pearson_25nn" = list(name = "UBCF",
-                            param = list(method = "pearson", 
-                                         nn = 25,
-                                         normalize = "center"))
+                             param = list(method = "pearson", 
+                                          nn = 25,
+                                          normalize = "center")),
+  "ubcf_pearson_50nn" = list(name = "UBCF",
+                             param = list(method = "pearson", 
+                                          nn = 50,
+                                          normalize = "center")),
+  "popular_recommender" = list(name = "POPULAR", param = NULL),
+  "random_recommender" = list(name = "RANDOM", param = NULL)
 )
+
 ```
 
 ### Run the UBCF Models
 
-Time to fit the recommender models. The type of model will be a "TopNList" recommender system instead of a "rating" based recommender system. This will allow us to evaluate models on the test data in a classification framework.
+Time to fit the recommender models. The type of model will be a "TopNList" recommender system instead of a "rating" based recommender system. This will allow us to evaluate models on the test data in a classification framework. 
 
 ``` {r eval = FALSE, echo = TRUE}
 ubcf_results <- evaluate(ubcf_single_test_scheme, 
                          ubcf_algorithms, 
                          type = "topNList", 
-                         n = c(1, 5, 10, 15, 25))
-
+                         n = c(5, 10, 15, 20, 25, 50))
 ```
+
+``` {r}
+s3load("ubcf_results.Rdata", bucket = "pred498team5")
+ubcf_results
+```
+
+
+### Compare & Evaluate the UBCF Models
+
+We can assess the best approach for how many top N items to recommend for different size lists of top N recommendations that we might consider making. Six different Top N lists for each user in the test dataset were generated. These recommendation lists are of size 5, 10, 15, 20, 25, and 50 to evaluate each model against using the test data. 
+
+We can evaluate the performance of each model and each different top N list using the test data through 2 meaningful but different classification accuracy metrics, precision and recall.
+
+* **precision**: represents the proportion of recommended items in the top N list that were actually positively rated by the test user (unknown to the model) in the top N list. Relatively higher values tell us the model's recommendations were more relevant to the test user. 
+
+* **recall (True Positive Rate) **: represents the proportion of all positively rated items by the test user (unknown to the model) that the model predicted in its top N list. Higher values tell us the model's good at capturing more of the positively rated items by the test user. 
+
+The first graph illustrates the recall (True Positive Rate) vs. False Positive Rate tradeoff. Models with a line closer to the top left indicate that they are better at identifying positively rated items by the test user without over recommending items that the test user does not actually prefer. 
+
+```{r}
+plot(ubcf_results, annotate=TRUE, legend = "topleft")
+```
+
+A another important graph is provided below. The better models are ones laying furthest to the top right of the graph. An optimal recommender system gives the best predictive combination of recommending relevant positively rated items by users in the holdout test data (precision) and these models also recommend relatively more of those positively rated items (recall). 
+
+```{r}
+plot(ubcf_results, "prec/rec", annotate=TRUE)
+```
+
+We see that the best performing candidate UBCF model is the model labeled ubcf_cosine_50nn. It performs very similarly to the popular item based recommender. While we could just recommend the most popular items to all users, which is a valid approach to making recommendations, this would simply result in a model that recommends the same things to everybody and does not discriminate between users. The ubcf_cosine_50nn achieves similar performance to a popular items recommender but it is also tailored to the implicit ratings profile of each individual user. It reflects an intuitive recommendation objective: identify what users interact with similar items in the same manner as me (implicit rating), and recommend other items they've also interacted with that I've not yet seen. 
+
 
 ## Item Based Collaborative Filtering
 
