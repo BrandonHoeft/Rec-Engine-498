@@ -104,6 +104,7 @@ all.equal(levels(as.factor(user_ratings$Parent)),
 
 
 # RecommenderLab ---------------------------------------------------------------
+library(recommenderlab)
 recommenderRegistry$get_entries(dataType = "realRatingMatrix")
 
 
@@ -117,14 +118,14 @@ summary(rowCounts(real_r))
 summary(colCounts(real_r))
 
 
-# Random Sample 20% of the users.
+# Random Sample 33% of the users.
 set.seed(2017)
 keep_index <- sample(seq_len(nrow(real_r)), 
                      size = nrow(real_r) * 0.33, replace = FALSE)
 real_r_sampled_rows <- real_r[keep_index, ]
 real_r_sampled_rows
 
-# Random Sample 10% of the parent items. 
+# Random Sample 75% of the parent items. 
 set.seed(2017)
 keep_col_index <- sample(seq_len(ncol(real_r)), 
                          size = ncol(real_r) * 0.75, replace = FALSE)
@@ -140,12 +141,8 @@ summary(colMeans(real_r_sampled_row_cols))
 
 
 
-
-
-
-
 # Keep users with a high number of ratings
-real_r_filtered_rows <- real_r_sampled_row_cols[rowCounts(real_r_sampled_row_cols) >= 50, ] 
+real_r_filtered_rows <- real_r_sampled_row_cols[rowCounts(real_r_sampled_row_cols) >= 50, ] # around median from above.
 nrow(real_r_filtered_rows) - nrow(real_r)
 real_r_filtered_rows
 # Updated row and column count summaries
@@ -160,20 +157,22 @@ summary(rowCounts(real_r_filtered_rows_cols))
 summary(colCounts(real_r_filtered_rows_cols))
 summary(rowMeans(real_r_filtered_rows_cols))
 summary(colMeans(real_r_filtered_rows_cols))
-
 real_r_filtered_rows_cols
 
 
 
-ubcf_scheme <- evaluationScheme(real_r_filtered_rows_cols,
+# Fit Models Individually ------------------------------------------------------
+
+set.seed(2017)
+ubcf_scheme1 <- evaluationScheme(real_r_filtered_rows_cols,
                                 method = "split", # random train/test scheme
                                 train = 0.75,
                                 k = 1,
                                 given = -30,  # how many records for a test user will learn the model? Give all but 30. 
                                 goodRating = 3) # threshold for classification. Just above Median Total_rating_max10.
-ubcf_scheme
+ubcf_scheme1
 
-ubcf_algorithms <- list(
+ubcf_algorithms1 <- list(
   "ubcf_cosine_25nn" = list(name = "UBCF",
                             param = list(method = "cosine", 
                                          nn = 25,
@@ -184,29 +183,29 @@ ubcf_algorithms <- list(
                                           normalize = "center"))
 )
 
-# Fit Models Individually ------------------------------------------------------
 
-model1 <- getData(ubcf_scheme, "train") %>% 
-  Recommender(method = "UBCF", parameter = ubcf_algorithms$ubcf_cosine_25nn$param)
 
-model2 <- getData(ubcf_scheme, "train") %>% 
-  Recommender(method = "UBCF", parameter = ubcf_algorithms$ubcf_pearson_25nn$param)
+model1 <- getData(ubcf_scheme1, "train") %>% 
+  Recommender(method = "UBCF", parameter = ubcf_algorithms1$ubcf_cosine_25nn$param)
+
+model2 <- getData(ubcf_scheme1, "train") %>% 
+  Recommender(method = "UBCF", parameter = ubcf_algorithms1$ubcf_pearson_25nn$param)
 
 # Apply model to data
-model1_pred <- predict(model1, getData(ubcf_scheme, "known"), type = "topNList", n = 5)
+model1_pred <- predict(model1, getData(ubcf_scheme1, "known"), type = "topNList", n = 5)
 
-model2_pred <- predict(model2, getData(ubcf_scheme, "known"), type = "topNList", n = 5)
+model2_pred <- predict(model2, getData(ubcf_scheme1, "known"), type = "topNList", n = 5)
 
 # Evaluate Predictions on unknown test data 
 
 model1_accuracy = calcPredictionAccuracy(model1_pred, 
-                                         getData(ubcf_scheme, "unknown"),
+                                         getData(ubcf_scheme1, "unknown"),
                                          given = -30,
                                          goodRating = 3,
                                          byUser = FALSE)
 
 model2_accuracy = calcPredictionAccuracy(model2_pred, 
-                                         getData(ubcf_scheme, "unknown"),
+                                         getData(ubcf_scheme1, "unknown"),
                                          given = -30,
                                          goodRating = 3,
                                          byUser = FALSE)
@@ -214,91 +213,54 @@ model2_accuracy = calcPredictionAccuracy(model2_pred,
 rbind(model1_accuracy, model2_accuracy)
 
 
+
+
 # Fit Models Iteratively -------------------------------------------------------
 
-ubcf_results <- evaluate(ubcf_scheme, 
-                         ubcf_algorithms, 
-                         type = "topNList", 
-                         n = c(5, 10, 15, 25))
-
-avg(ubcf_results)
-class(ubcf_results)
-
-plot(ubcf_results, annotate=TRUE)
-plot(ubcf_results, "prec/rec", annotate=TRUE)
-
-
-# Fit Models Iteratively ubcf_scheme2 ------------------------------------------
-ubcf_scheme2 <- evaluationScheme(real_r_filtered_rows_cols,
-                                 method = "split", # random train/test scheme
-                                 train = 0.75,
-                                 k = 1,
-                                 given = -30,  # how many records for a test user will learn the model? Give all but 30. 
-                                 goodRating = 5) 
-
-ubcf_results2 <- evaluate(ubcf_scheme2, 
-                         ubcf_algorithms, 
-                         type = "topNList", 
-                         n = c(5, 10, 15, 25))
-
-avg(ubcf_results2)
-
-plot(ubcf_results2, annotate=TRUE)
-plot(ubcf_results2, "prec/rec", annotate=TRUE)
-
-
-# Fit Models Iteratively ubcf_scheme3 (BEST SO FAR!!!! give fewer items to learn the model ---------------------
-ubcf_scheme3 <- evaluationScheme(real_r_filtered_rows_cols,
-                                 method = "split", # random train/test scheme
-                                 train = 0.75,
-                                 k = 1,
-                                 given = 10,  # how many records for a test user will learn the model? 
-                                 goodRating = 3) # threshold for classification. Just above Median Total_rating_max10.
-
-ubcf_results3 <- evaluate(ubcf_scheme3, 
-                          ubcf_algorithms, 
-                          type = "topNList", 
-                          n = c(5, 10, 15, 25))
-
-avg(ubcf_results3)
-
-plot(ubcf_results3, annotate=TRUE)
-plot(ubcf_results3, "prec/rec", annotate=TRUE)
-
-# Fit 4 different model schemes iteratively. ubcf_scheme4 ----------------------
-ubcf_scheme4 <- evaluationScheme(real_r_filtered_rows_cols,
-                                 method = "split", # random train/test scheme
-                                 train = 0.75,
-                                 k = 1,
-                                 given = 10,  # how many records for a test user will learn the model? 
-                                 goodRating = 4) # threshold for classification. Just above Median Total_rating_max10.
+# given = 5, nearest neighbor to 25, 50. 
+set.seed(2017)
+#ubcf_scheme <- evaluationScheme(real_r_filtered_rows_cols,
+#                                method = "split", # random train/test scheme
+#                                train = 0.75,
+#                                k = 1,
+#                                given = 5,  # how many records for a test user will learn the model? 
+#                                goodRating = 3) # threshold for classification. Just above Median Total_rating_max10.
+#s3save(ubcf_scheme, bucket = "pred498team5", object = "ubcf_scheme.Rdata")
+#s3load("ubcf_scheme.Rdata", bucket = "pred498team5")
 
 ubcf_algorithms_list <- list(
-  "ubcf_cosine_10nn" = list(name = "UBCF",
-                            param = list(method = "cosine", 
-                                         nn = 10,
-                                         normalize = "center")),
   "ubcf_cosine_25nn" = list(name = "UBCF",
                             param = list(method = "cosine", 
                                          nn = 25,
                                          normalize = "center")),
-  "ubcf_pearson_10nn" = list(name = "UBCF",
-                             param = list(method = "pearson", 
-                                          nn = 10,
-                                          normalize = "center")),
-  
+  "ubcf_cosine_50nn" = list(name = "UBCF",
+                            param = list(method = "cosine", 
+                                         nn = 50,
+                                         normalize = "center")),
   "ubcf_pearson_25nn" = list(name = "UBCF",
                              param = list(method = "pearson", 
                                           nn = 25,
                                           normalize = "center")),
-  "random_rec_system" = list(name = "RANDOM", param = NULL)
+  "ubcf_pearson_50nn" = list(name = "UBCF",
+                             param = list(method = "pearson", 
+                                          nn = 50,
+                                          normalize = "center")),
+  "popular_recommender" = list(name = "POPULAR", param = NULL),
+  "random_recommender" = list(name = "RANDOM", param = NULL)
 )
 
-ubcf_results4 <- evaluate(ubcf_scheme4, 
-                          ubcf_algorithms_list, 
-                          type = "topNList", 
-                          n = c(1, 5, 10, 15, 20, 25, 50))
+#ubcf_results <- evaluate(ubcf_scheme, 
+#                         ubcf_algorithms_list, 
+#                         type = "topNList", 
+#                         n = c(5, 10, 15, 20, 25, 50))
+#s3save(ubcf_results, bucket = "pred498team5", object = "ubcf_results.Rdata")
+#s3load("ubcf_results.Rdata", bucket = "pred498team5")
 
-avg(ubcf_results4)
-plot(ubcf_results4, annotate=TRUE)
-plot(ubcf_results4, "prec/rec", annotate=TRUE)
+avg(ubcf_results)
+plot(ubcf_results, annotate=TRUE)
+plot(ubcf_results, "prec/rec", annotate=TRUE)
+
+ubcf_results
+ubcf_results[["ubcf_pearson_25nn"]]
+
+
