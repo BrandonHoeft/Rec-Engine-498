@@ -7,25 +7,20 @@ library(Matrix)
 library(recommenderlab)
 
 
-# specify keys as environment variables so I can read my s3 object(s) from AWS.
-# Your unique access key/secret needs to be passed before running the queries below. 
-Sys.setenv("AWS_ACCESS_KEY_ID" = "",
-           "AWS_SECRET_ACCESS_KEY" = "")
-
-# load dataset from the bucket as a csv ----------------------------------------
-
-# items data: part number, parent, catalogue, attributes/values.
-# parse warning, but get identical results if using read.table and comparing results with all.equal()
-
 colTypes = c("character", "character", "integer", "character",  
   "integer","integer","integer","integer","integer","integer","integer","integer","integer","integer",
   "integer","integer","integer","integer","integer","integer","integer","integer","integer","integer",
   "integer","integer","integer","integer","integer","integer","integer","integer","integer","integer",
   "integer","integer","integer","integer","integer","integer","integer","integer","integer","integer")
 
-
-
 user_ratings = read.csv("/Users/haydude/Development/mspa/498 - Capstone/data/webActivityRated.csv", header = TRUE)
+items = read.csv("/Users/haydude/Development/mspa/498 - Capstone/data/items.csv", header = TRUE)
+
+
+plot(density(user_ratings$AnyRating))
+plot(density(user_ratings$WeightedRating))
+
+ggplot(user_ratings, aes(x=AnyRating)) + geom_density() + xlim(0,10)
 
 sparse_r <- sparseMatrix(i = as.integer(as.factor(user_ratings$VisitorId)), 
                          j = as.integer(as.factor(user_ratings$Parent)),
@@ -46,5 +41,36 @@ real_r_non_missing_percent
 
 getRatingMatrix(real_r[1:100, 1:10])
 
+# define parameters for model evaluation scheme.
+?evaluationScheme
+train_proportion <- .80
+use_n_test_records_per_user <- 5 # use 5 records per test user to learn model.
+good_rating <- 2.5 # a good rating threshold for a binary classifier?
+
+#real_r[rowCounts(real_r) > 7, ]
+
+# Create the evaluation scheme for fitting and testing the recommender algorithm.
+set.seed(123)
+model_train_scheme <- real_r[rowCounts(real_r) >= use_n_test_records_per_user, ] %>%
+  evaluationScheme(method = 'split', # single train/test partition
+                   train = train_proportion, # random sample proportion.
+                   given = use_n_test_records_per_user, 
+                   goodRating = good_rating,
+                   k = 1)
+
+# Fit a UBCF recommender system algorithm. 
+# Building a Recommender System with R by Gorakala and Usuelli. Ch.4 pp 84
+model_params <- list(method = "cosine",
+                     nn = 25, # find each user's 25 most similar users.
+                     sample = FALSE, # already did this.
+                     # centered cosine similarity > raw cosine similarity.
+                     # https://youtu.be/h9gpufJFF-0?list=PLPEu1YFt_zElULdcZBwiDOtOiNLXErWos&t=332
+                     normalize = "center")
+
+# Model1: centered cosine similarity.
+model1 <- getData(model_train_scheme, "train") %>% 
+  Recommender(method = "UBCF", parameter = model_params)
+
+model1_pred <- predict(model1, getData(model_train_scheme, "known"), type = "ratings")
 
 
