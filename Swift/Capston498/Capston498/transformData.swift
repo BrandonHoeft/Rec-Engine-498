@@ -22,11 +22,11 @@ enum ActivityType: Int {
         if fileType == 2 {return ActivityType.select.rawValue}
         if fileType == 3 {return ActivityType.detail.rawValue}
         return ActivityType.strong.rawValue
-//        add_to_order    1   (adding an item to the order)
-//        part_number        2    (selecting a part number)
-//        product_detail    3    (selecting to see detail on a part number)
-//        print_product_detail    4 (printing the detail)
-//        save_cad        5    (saving a cad drawing from the detail)
+        //        add_to_order    1   (adding an item to the order)
+        //        part_number        2    (selecting a part number)
+        //        product_detail    3    (selecting to see detail on a part number)
+        //        print_product_detail    4 (printing the detail)
+        //        save_cad        5    (saving a cad drawing from the detail)
     }
 }
 class Item {
@@ -61,7 +61,7 @@ class Activity {
     var rating: Double?
     var countWeighted: Double?
     var ratingWeighted: Double?
-
+    
     init() {}
     
     init?(_ line: String) {
@@ -98,13 +98,13 @@ private func processActivityFile(_ filePath: String) throws -> [Activity] {
     }
     
     log("processActivityFile end")
-
+    
     return activities
 }
 
 private func processItemFile(_ filePath: String) throws -> [Item] {
     log("processItemFile start")
-
+    
     var itemsFile = try String(contentsOfFile: filePath, encoding: String.Encoding.utf8)
     let lines = itemsFile.components(separatedBy: "\r\n")
     itemsFile = ""
@@ -122,26 +122,26 @@ private func processItemFile(_ filePath: String) throws -> [Item] {
         counter += 1
     }
     log("processItemFile end")
-
+    
     return items
 }
 
 private func itemToParentMap(_ items: [Item]) -> [String: String] {
     log("itemToParentMap start")
-
+    
     var map: [String: String] = [:]
     for item in items {
         map[item.partNumber] = item.parent
     }
     
     log("itemToParentMap end")
-
+    
     return map
 }
 
 private func sortActivitiesByVisitorDateParent(_ activities: inout [Activity]) {
     log("sortActivities start")
-
+    
     activities.sort(by: { one, two in
         if one.visitorId == two.visitorId {
             if one.date == two.date {
@@ -153,7 +153,7 @@ private func sortActivitiesByVisitorDateParent(_ activities: inout [Activity]) {
         return one.visitorId < two.visitorId
     })
     log("sortActivities end")
-
+    
 }
 
 private func sortActivitiesByVisitorParent(_ activities: inout [Activity]) {
@@ -179,9 +179,9 @@ private func log(_ message: String) {
 
 private func massageForHighestParentActivityPerDay(_ activities: inout [Activity]) -> [Activity] {
     log("massageForHighestParentActivityPerDay start")
-
+    
     sortActivitiesByVisitorDateParent(&activities)
-
+    
     var filteredActivities: [Activity] = []
     var visitorId: Int64 = -1
     var parent: String = ""
@@ -222,7 +222,7 @@ private func massageForHighestParentActivityPerDay(_ activities: inout [Activity
     filteredActivities.append(filteredActivity)
     
     log("massageForHighestParentActivityPerDay end")
-
+    
     return filteredActivities
 }
 
@@ -326,7 +326,7 @@ private func writeActivitiesToFile(fileName: String, activities: [Activity]) {
 private func writeRatedActivitiesToFile(fileName: String, activities: [Activity]) {
     
     log("writeRatedActivitiesToFile start")
-
+    
     let dir = try? FileManager.default.url(for: .documentDirectory,
                                            in: .userDomainMask,
                                            appropriateFor: nil,
@@ -383,7 +383,7 @@ do {
     let ratedWeightedActivities = assignRatingsForActivityTypeWeight(activities: &highestActivitiesPerDay)
     
     writeRatedActivitiesToFile(fileName: "webActivityRated", activities: ratedWeightedActivities)
-
+    
     
 } catch {
     print("Whoops! An error occurred: \(error)")
