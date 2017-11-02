@@ -104,6 +104,8 @@ user_ratings <- user_items %>%
          total_rating_max10 = ifelse(total_rating > 10, 10, total_rating)) %>%
   arrange(VisitorId, total_rating)
 
+s3save(user_ratings, object="user_ratings.Rdata", bucket = "pred498engine")
+
 ### Setting up a User Ratings Matrix
 
 library(Matrix)
@@ -136,7 +138,7 @@ all.equal(levels(as.factor(user_ratings$Parent)),
 
 
 # Random Sample 33% of the users.
-set.seed(123)
+set.seed(2017)
 keep_index <- sample(seq_len(nrow(real_r)), 
 size = nrow(real_r) * 0.33, replace = FALSE)
 real_r_sampled_rows <- real_r[keep_index, ]
@@ -146,7 +148,7 @@ real_r_sampled_rows
 
 
 # Random Sample 75% of the parent items. 
-set.seed(123)
+set.seed(2017)
 keep_col_index <- sample(seq_len(ncol(real_r)), 
 size = ncol(real_r) * 0.75, replace = FALSE)
 real_r_sampled_row_cols <- real_r_sampled_rows[, keep_col_index]
@@ -188,7 +190,7 @@ getCosine <- function(x,y)
 # Item Based Collaborative Filtering
 #------------------------------------------------------------------------------
 
-set.seed(123)
+set.seed(2017)
 ibcf_scheme <- evaluationScheme(real_r_filtered_rows_cols,
                                 method = "split", # random train/test scheme
                                 train = 0.75,
@@ -196,16 +198,54 @@ ibcf_scheme <- evaluationScheme(real_r_filtered_rows_cols,
                                 given = 5,  # how many records for a test user will learn the model? 
                                 goodRating = 3) # threshold for classification. Just above Median Total_rating_max10.
 
-s3load("ibcf_scheme.Rdata", bucket = "pred498engine")
 ibcf_scheme
 
-set.seed(123)
+#Brief descriptions of this algorithm and its default tuning parameters are illustrated below. 
+# recommenderRegistry$get_entries(dataType = "realRatingMatrix")
+recommenderRegistry$get_entries(dataType = "realRatingMatrix")$IBCF_realRatingMatrix 
+
+ibcf_algorithms_list <- list(
+  "ibcf_cosine_100k" = list(name = "IBCF",
+                            param = list(method = "cosine", 
+                                         k = 100,
+                                         normalize = "center")),
+  "ibcf_pearson_100k" = list(name = "IBCF",
+                            param = list(method = "pearson", 
+                                         k = 100,
+                                         normalize = "center")),
+  "popular_recommender" = list(name = "POPULAR", param = NULL),
+  "random_recommender" = list(name = "RANDOM", param = NULL)
+)
+
+#run IBCF models
+set.seed(2017)
+ibcf_results <- evaluate(ibcf_scheme, 
+                         ibcf_algorithms_list, 
+                         type = "topNList", 
+                         n = c(5, 10, 15, 20, 25, 50))
+
+s3save(ibcf_results, object = "ibcf_results.Rdata", bucket = "pred498engine")
+
+'/ Begin: old code
+set.seed(2017)
 model_IBCF <- Recommender(getData(ibcf_scheme, "train"), method = "IBCF", 
                      param=list(normalize = "center", method="Cosine", k=350))
 
-prediction_IBCF <- predict(model_IBCF, getData(ibcf_scheme, "known"), type = "topNList")
+ibcf1_results <- predict(model_IBCF, getData(ibcf_scheme, "known"), type = "topNList")
+s3load("ibcf1_results.Rdata", bucket = "pred498engine")
+ibcf1_results
+
 rmse_IBCF <- calcPredictionAccuracy(prediction_IBCF, getData(ibcf_scheme, "unknown"), goodRating = 3, given = 5)[1]
-rmse_IBCF #0.1410256 
+rmse_IBCF #0.1410256 #this was all with set.seed(123), switched it to stay consistent with Brandons models
+/'
+
+### Compare & Evaluate the IBCF Models
+plot(ibcf_results, annotate=TRUE) #ROC curve
+
+plot(ibcf_results, "prec/rec", annotate=TRUE)
+
+
+
 #------------------------------------------------------------------------------
 # Slope One Model https://github.com/tarashnot/SlopeOne
 #------------------------------------------------------------------------------
@@ -225,7 +265,7 @@ SO_ratings[, item_id := as.character(item_id)]
 setkey(SO_ratings, user_id, item_id)
 
 #split train and test
-set.seed(123)
+set.seed(2017)
 
 in_train <- rep(TRUE, nrow(SO_ratings))
 in_train[sample(1:nrow(SO_ratings), size = round(0.2 * length(unique(SO_ratings$user_id)), 0) * 5)] <- FALSE
@@ -250,3 +290,7 @@ SO_unnormalized_predictions <- unnormalize_ratings(normalized = SO_ratings_train
 #calculate RMSE on test set
 rmse_slopeone <- sqrt(mean((SO_unnormalized_predictions$predicted_rating - SO_ratings_test$rating)^2))
 rmse_slopeone #2.41168 not very good
+
+#------------------------------------------------------------------------------
+# Hybrid
+#------------------------------------------------------------------------------
