@@ -7,6 +7,12 @@ library(ggplot2) # data viz.
 library(pryr) # mem_used() and object_size() functions to manage/understand memory usage.
 
 
+# specify keys as environment variables so I can read my s3 object(s) from AWS.
+# Your unique access key/secret needs to be passed before running the queries below. 
+#Sys.setenv("AWS_ACCESS_KEY_ID" = "",
+#           "AWS_SECRET_ACCESS_KEY" = "")
+
+
 # Import Data and wrangle it ---------------------------------------------------
 
 # items: part number, parent, catalogue, attributes/values.
@@ -263,4 +269,8 @@ plot(ubcf_results, "prec/rec", annotate=TRUE)
 ubcf_results
 ubcf_results[["ubcf_pearson_25nn"]]
 
+
+# Fit Best User-based CF model, get test predictions -------------------------------
+# ubcf_cosine_50nn won out on a train/test scheme on a subsample of user records. 
+# will refit a single train/test scheme.
 
