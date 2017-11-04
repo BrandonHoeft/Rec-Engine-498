@@ -253,30 +253,30 @@ s3load("ubcf_top20_predictions.Rdata", bucket = "pred498team5")
 str(ubcf_top20_predictions)
 
 test_recommendations <- data.frame(VisitorId = character(length = nrow(testing)),
-                                   rec1 = character(length = nrow(testing)),
-                                   rec2 = character(length = nrow(testing)), 
-                                   rec3 = character(length = nrow(testing)), 
-                                   rec4 = character(length = nrow(testing)), 
-                                   rec5 = character(length = nrow(testing)), 
-                                   rec6 = character(length = nrow(testing)), 
-                                   rec7 = character(length = nrow(testing)), 
-                                   rec8 = character(length = nrow(testing)), 
-                                   rec9 = character(length = nrow(testing)), 
-                                   rec10 = character(length = nrow(testing)), 
-                                   rec11 = character(length = nrow(testing)), 
-                                   rec12 = character(length = nrow(testing)),
-                                   rec13 = character(length = nrow(testing)),
-                                   rec14 = character(length = nrow(testing)),
-                                   rec15 = character(length = nrow(testing)),
-                                   rec16 = character(length = nrow(testing)),
-                                   rec17 = character(length = nrow(testing)),
-                                   rec18 = character(length = nrow(testing)),
-                                   rec19 = character(length = nrow(testing)),
-                                   rec20 = character(length = nrow(testing)),
+                                   rec1 = integer(length = nrow(testing)),
+                                   rec2 = integer(length = nrow(testing)), 
+                                   rec3 = integer(length = nrow(testing)), 
+                                   rec4 = integer(length = nrow(testing)), 
+                                   rec5 = integer(length = nrow(testing)), 
+                                   rec6 = integer(length = nrow(testing)), 
+                                   rec7 = integer(length = nrow(testing)), 
+                                   rec8 = integer(length = nrow(testing)), 
+                                   rec9 = integer(length = nrow(testing)), 
+                                   rec10 = integer(length = nrow(testing)), 
+                                   rec11 = integer(length = nrow(testing)), 
+                                   rec12 = integer(length = nrow(testing)),
+                                   rec13 = integer(length = nrow(testing)),
+                                   rec14 = integer(length = nrow(testing)),
+                                   rec15 = integer(length = nrow(testing)),
+                                   rec16 = integer(length = nrow(testing)),
+                                   rec17 = integer(length = nrow(testing)),
+                                   rec18 = integer(length = nrow(testing)),
+                                   rec19 = integer(length = nrow(testing)),
+                                   rec20 = integer(length = nrow(testing)),
                                    stringsAsFactors=FALSE) 
 
 for(i in 1:nrow(testing)) {
-  test_recommendations$VisitorId[i] <- dimnames(testing)[[i]]
+  test_recommendations$VisitorId[i] <- dimnames(testing)[[1]][i]
   test_recommendations$rec1[i]  <-ubcf_top20_predictions@items[[i]][1]
   test_recommendations$rec2[i]  <-ubcf_top20_predictions@items[[i]][2]
   test_recommendations$rec3[i]  <-ubcf_top20_predictions@items[[i]][3]
@@ -299,24 +299,25 @@ for(i in 1:nrow(testing)) {
   test_recommendations$rec20[i]  <-ubcf_top20_predictions@items[[i]][20]
 }
 
-temp <- unlist(ubcf_top20_predictions@items)
+test_recommendations_tidy <- test_recommendations %>%
+  gather(key = rec_number, value = parent_index, -VisitorId)
 
 item_labels <- as.character(ubcf_top20_predictions@itemLabels)
+item_labels_df <- data.frame(parent_index = 1:length(item_labels),
+                             parent = item_labels)
 
-# Returns the test recommendations for each user, and the labels of the items.
-test_recommendations <- vapply(ubcf_top20_predictions@items, 
-                               function(x) {colnames(testing)[x]},
-                               FUN.VALUE = 1)
+# left join the parent item label to test_recommendations_tidy.
+test_recommendations_update <- test_recommendations_tidy %>%
+  left_join(item_labels_df, by = 'parent_index') %>%
+  mutate(rec_number_ = as.numeric(gsub("[^0-9]", "", rec_number))) %>% # strip off the string.
+  arrange(VisitorId, rec_number_)
 
-  t() # transpose, so each row is a user, each column is a recommendation.
 
-ubcf_top20_predictions@items
-for (i in )
-dim(test_recommendations)
-test_recommendations[1,]
-test_recommendations[1:5,1:20]
+user1 <- ubcf_top20_predictions@items[[1]]
+items_user1 <- ubcf_top20_predictions@itemLabels[user1]
+items_user1
 
-ubcf_top20_predictions@ratings[1]
-
-temp <- dimnames(testing)[[1]]
-temp[1:20]
+# values from the ubcf_top20_predictions S4 object for user1 match the parent
+# labels for the first user in the test_recommendations_update dataset.
+all.equal(items_user1, 
+          as.character(test_recommendations_update[test_recommendations_update$VisitorId == '1000434402046', ]$parent))
