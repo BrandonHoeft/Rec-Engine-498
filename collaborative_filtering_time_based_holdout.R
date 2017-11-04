@@ -250,14 +250,73 @@ ubcf_model
 #                             n = 20)
 #s3save(ubcf_top20_predictions, bucket = "pred498team5", object = "ubcf_top20_predictions.Rdata")
 s3load("ubcf_top20_predictions.Rdata", bucket = "pred498team5")
+str(ubcf_top20_predictions)
 
-# Calculate predictive accuracy, by user. 
-testset_accuracy_by_user <- calcPredictionAccuracy(top20_predictions, 
-                                                 getData(ubcf_best_scheme, "unknown"),
-                                                 given = 5,
-                                                 goodRating = 3,
-                                                 byUser = TRUE)
+test_recommendations <- data.frame(VisitorId = character(length = nrow(testing)),
+                                   rec1 = character(length = nrow(testing)),
+                                   rec2 = character(length = nrow(testing)), 
+                                   rec3 = character(length = nrow(testing)), 
+                                   rec4 = character(length = nrow(testing)), 
+                                   rec5 = character(length = nrow(testing)), 
+                                   rec6 = character(length = nrow(testing)), 
+                                   rec7 = character(length = nrow(testing)), 
+                                   rec8 = character(length = nrow(testing)), 
+                                   rec9 = character(length = nrow(testing)), 
+                                   rec10 = character(length = nrow(testing)), 
+                                   rec11 = character(length = nrow(testing)), 
+                                   rec12 = character(length = nrow(testing)),
+                                   rec13 = character(length = nrow(testing)),
+                                   rec14 = character(length = nrow(testing)),
+                                   rec15 = character(length = nrow(testing)),
+                                   rec16 = character(length = nrow(testing)),
+                                   rec17 = character(length = nrow(testing)),
+                                   rec18 = character(length = nrow(testing)),
+                                   rec19 = character(length = nrow(testing)),
+                                   rec20 = character(length = nrow(testing)),
+                                   stringsAsFactors=FALSE) 
 
-testset_accuracy_by_user <- as.data.frame(testset_accuracy_by_user) %>%
-  mutate(VisitorId = row.names(.)) %>%
-  select(VisitorId, everything())
+for(i in 1:nrow(testing)) {
+  test_recommendations$VisitorId[i] <- dimnames(testing)[[i]]
+  test_recommendations$rec1[i]  <-ubcf_top20_predictions@items[[i]][1]
+  test_recommendations$rec2[i]  <-ubcf_top20_predictions@items[[i]][2]
+  test_recommendations$rec3[i]  <-ubcf_top20_predictions@items[[i]][3]
+  test_recommendations$rec4[i]  <-ubcf_top20_predictions@items[[i]][4]
+  test_recommendations$rec5[i]  <-ubcf_top20_predictions@items[[i]][5]
+  test_recommendations$rec6[i]  <-ubcf_top20_predictions@items[[i]][6]
+  test_recommendations$rec7[i]  <-ubcf_top20_predictions@items[[i]][7]
+  test_recommendations$rec8[i]  <-ubcf_top20_predictions@items[[i]][8]
+  test_recommendations$rec9[i]  <-ubcf_top20_predictions@items[[i]][9]
+  test_recommendations$rec10[i]  <-ubcf_top20_predictions@items[[i]][10]
+  test_recommendations$rec11[i]  <-ubcf_top20_predictions@items[[i]][11]
+  test_recommendations$rec12[i]  <-ubcf_top20_predictions@items[[i]][12]
+  test_recommendations$rec13[i]  <-ubcf_top20_predictions@items[[i]][13]
+  test_recommendations$rec14[i]  <-ubcf_top20_predictions@items[[i]][14]
+  test_recommendations$rec15[i]  <-ubcf_top20_predictions@items[[i]][15]
+  test_recommendations$rec16[i]  <-ubcf_top20_predictions@items[[i]][16]
+  test_recommendations$rec17[i]  <-ubcf_top20_predictions@items[[i]][17]
+  test_recommendations$rec18[i]  <-ubcf_top20_predictions@items[[i]][18]
+  test_recommendations$rec19[i]  <-ubcf_top20_predictions@items[[i]][19]
+  test_recommendations$rec20[i]  <-ubcf_top20_predictions@items[[i]][20]
+}
+
+temp <- unlist(ubcf_top20_predictions@items)
+
+item_labels <- as.character(ubcf_top20_predictions@itemLabels)
+
+# Returns the test recommendations for each user, and the labels of the items.
+test_recommendations <- vapply(ubcf_top20_predictions@items, 
+                               function(x) {colnames(testing)[x]},
+                               FUN.VALUE = 1)
+
+  t() # transpose, so each row is a user, each column is a recommendation.
+
+ubcf_top20_predictions@items
+for (i in )
+dim(test_recommendations)
+test_recommendations[1,]
+test_recommendations[1:5,1:20]
+
+ubcf_top20_predictions@ratings[1]
+
+temp <- dimnames(testing)[[1]]
+temp[1:20]
