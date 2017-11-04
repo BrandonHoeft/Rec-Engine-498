@@ -85,7 +85,7 @@ keep_visitor_index <- user_activity_bw_periods %>%
   filter(before_jul17 > 19 & after_jul17 > 13) %>%
   select(VisitorId) %>%
   mutate(VisitorId = as.character(VisitorId)) %>%
-  sample_frac(.33) # sample a 33% subset of these records to model with. 
+  sample_frac(.25) # sample a 25% subset of these records to model with. 
   
 keep_visitor_index <- keep_visitor_index$VisitorId
 
@@ -229,7 +229,8 @@ summary(rowCounts(training)); summary(rowCounts(testing))
 summary(colCounts(training)); summary(colCounts(testing)); 
 summary(rowMeans(training)); summary(rowMeans(testing))
 
-
+training
+testing
 # Fit Best User-based CF model, get test predictions -------------------------------
 # ubcf_cosine_50nn won out vs other UBCF models in separate script (collab_filtering_smaller_samples.R)
 
@@ -239,15 +240,16 @@ ubcf_model <- Recommender(data = training,
                           parameter = list(method = "cosine",
                                            nn = 50,
                                            normalize = "center"))
-
 ubcf_model
 
 # Recommend new Movies to the same users, but based on their unseen activity 
-# from 1-month later. 
-top20_predictions <- predict(object = ubcf_model, 
-                             newdata = testing, 
-                             type = "topNList", 
-                             n = 20)
+# from 2-month later. 
+#ubcf_top20_predictions <- predict(object = ubcf_model, 
+#                             newdata = testing, 
+#                             type = "topNList", 
+#                             n = 20)
+#s3save(ubcf_top20_predictions, bucket = "pred498team5", object = "ubcf_top20_predictions.Rdata")
+s3load("ubcf_top20_predictions.Rdata", bucket = "pred498team5")
 
 # Calculate predictive accuracy, by user. 
 testset_accuracy_by_user <- calcPredictionAccuracy(top20_predictions, 
