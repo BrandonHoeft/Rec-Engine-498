@@ -80,18 +80,22 @@ summary(user_activity_bw_periods$after_jul17)
 
 # Keep users interacting with > 1st quartile count of different Parent items
 #   pre-July 2017 (Training period) and in/after-July 2017 (testing period)
+set.seed(2017)
 keep_visitor_index <- user_activity_bw_periods %>%
   filter(before_jul17 > 19 & after_jul17 > 13) %>%
   select(VisitorId) %>%
-  mutate(VisitorId = as.character(VisitorId))
+  mutate(VisitorId = as.character(VisitorId)) %>%
+  sample_frac(.33) # sample a 33% subset of these records to model with. 
+  
 keep_visitor_index <- keep_visitor_index$VisitorId
 
-# Split the data into 6-months vs 1-month --------------------------------------
-user_items_first_6month <- user_items %>%
+# Split the data into 5-months vs 2-month --------------------------------------
+# each dataset will have the same VisitorIds in them.
+user_items_first_5month <- user_items %>%
   filter(ActionDate < mdy('7/1/2017'), # Feb - Jun used for training.
          VisitorId %in% keep_visitor_index) # Visitors with enough different Parent interactions pre July17
 
-user_items_lastmonth <- user_items %>%
+user_items_last_2month <- user_items %>%
   filter(ActionDate >= mdy('7/1/2017'), # Jul - Aug used for testing.
          VisitorId %in% keep_visitor_index) # Visitors with enough different Parent interactions during/after July17
 
@@ -99,7 +103,7 @@ user_items_lastmonth <- user_items %>%
 # Pre-process the ratings scheme -----------------------------------------------
 
 # For a time-based Training dataset.
-user_ratings_first_6month <- user_items_first_6month %>%
+user_ratings_first_5month <- user_items_first_5month %>%
   select(VisitorId, Parent, ActionDate, action_rating) %>%
   # create group window for each Visitor's individual session(day) with a Parent# 
   group_by(VisitorId, Parent, ActionDate) %>%
@@ -122,7 +126,7 @@ user_ratings_first_6month <- user_items_first_6month %>%
 
 # For a time-based Testing dataset.
 
-user_ratings_lastmonth <- user_items_lastmonth %>%
+user_ratings_last_2month <- user_items_last_2month %>%
   select(VisitorId, Parent, ActionDate, action_rating) %>%
   # create group window for each Visitor's individual session(day) with a Parent# 
   group_by(VisitorId, Parent, ActionDate) %>%
@@ -150,35 +154,39 @@ library(Matrix)
 # https://stackoverflow.com/questions/28430674/create-sparse-matrix-from-data-frame?noredirect=1&lq=1
 # the VisitorId and Parent need to be 1 based indices when creating a matrix. 
 # Per ?factor, the levels of a factor are by default sorted.
-training_matrix <- sparseMatrix(i = as.integer(as.factor(user_ratings_first_6month$VisitorId)), 
-                         j = as.integer(as.factor(user_ratings_first_6month$Parent)),
-                         x = user_ratings_first_6month$total_rating_max10)
+training_matrix <- sparseMatrix(i = as.integer(as.factor(user_ratings_first_5month$VisitorId)), 
+                         j = as.integer(as.factor(user_ratings_first_5month$Parent)),
+                         x = user_ratings_first_5month$total_rating_max10)
 
 # can rename the matrix row and column labels with unique VisitorId and Parent names. 
-dimnames(training_matrix) <- list(sort(unique(user_ratings_first_6month$VisitorId)),
-                           sort(unique(user_ratings_first_6month$Parent)))
+dimnames(training_matrix) <- list(sort(unique(user_ratings_first_5month$VisitorId)),
+                           sort(unique(user_ratings_first_5month$Parent)))
 
-all.equal(levels(as.factor(user_ratings_first_6month$VisitorId)), 
-          sort(unique(user_ratings_first_6month$VisitorId))) 
+all.equal(levels(as.factor(user_ratings_first_5month$VisitorId)), 
+          sort(unique(user_ratings_first_5month$VisitorId))) 
 
-all.equal(levels(as.factor(user_ratings_first_6month$Parent)), 
-          sort(unique(user_ratings_first_6month$Parent))) 
+all.equal(levels(as.factor(user_ratings_first_5month$Parent)), 
+          sort(unique(user_ratings_first_5month$Parent))) 
 
 
 
-testing_matrix <- sparseMatrix(i = as.integer(as.factor(user_ratings_lastmonth$VisitorId)), 
-                               j = as.integer(as.factor(user_ratings_lastmonth$Parent)),
-                               x = user_ratings_lastmonth$total_rating_max10)
+testing_matrix <- sparseMatrix(i = as.integer(as.factor(user_ratings_last_2month$VisitorId)), 
+                               j = as.integer(as.factor(user_ratings_last_2month$Parent)),
+                               x = user_ratings_last_2month$total_rating_max10)
 
 # can rename the matrix row and column labels with unique VisitorId and Parent names. 
-dimnames(testing_matrix) <- list(sort(unique(user_ratings_lastmonth$VisitorId)),
-                                  sort(unique(user_ratings_lastmonth$Parent)))
+dimnames(testing_matrix) <- list(sort(unique(user_ratings_last_2month$VisitorId)),
+                                  sort(unique(user_ratings_last_2month$Parent)))
 
-all.equal(levels(as.factor(user_ratings_lastmonth$VisitorId)), 
-          sort(unique(user_ratings_lastmonth$VisitorId))) 
+all.equal(levels(as.factor(user_ratings_last_2month$VisitorId)), 
+          sort(unique(user_ratings_last_2month$VisitorId))) 
 
-all.equal(levels(as.factor(user_ratings_lastmonth$Parent)), 
-          sort(unique(user_ratings_lastmonth$Parent))) 
+all.equal(levels(as.factor(user_ratings_last_2month$Parent)), 
+          sort(unique(user_ratings_last_2month$Parent))) 
+
+dim(training_matrix)
+dim(testing_matrix) # there are fewer items in the test set than training set.
+
 
 # RecommenderLab ---------------------------------------------------------------
 library(recommenderlab)
@@ -187,78 +195,40 @@ recommenderRegistry$get_entries(dataType = "realRatingMatrix")
 # coerce our training sparseMatrix, train_matrix into a realRatingMatrix object
 train_r <- as(training_matrix, "realRatingMatrix")
 train_r
-
 # How many ratings are there per user
 summary(rowCounts(train_r))
 # How many visitors have rated each item?
 summary(colCounts(train_r))
 
-# Random Sample 50% of the users.
-set.seed(2017)
-keep_index <- sample(seq_len(nrow(train_r)), 
-                     size = nrow(train_r) * 0.50, replace = FALSE)
-train_r_sampled_rows <- train_r[keep_index, ]
-train_r_sampled_rows
-
-# Random Sample 75% of the parent items. 
-set.seed(2017)
-keep_col_index <- sample(seq_len(ncol(train_r)), 
-                         size = ncol(train_r) * 0.75, replace = FALSE)
-train_r_sampled_row_cols <- train_r_sampled_rows[, keep_col_index]
-train_r_sampled_row_cols
-# Updated row and column count summaries
-summary(rowCounts(train_r_sampled_row_cols))
-summary(colCounts(train_r_sampled_row_cols))
-summary(rowMeans(train_r_sampled_row_cols))
-summary(colMeans(train_r_sampled_row_cols))
-
-
-# Keep users with a high number of ratings
-train_r_filtered_rows <- train_r_sampled_row_cols[rowCounts(train_r_sampled_row_cols) >= 50, ] # around median from above.
-nrow(train_r_filtered_rows) - nrow(train_r)
-train_r_filtered_rows
-# Updated row and column count summaries
-summary(rowCounts(train_r_filtered_rows))
-summary(colCounts(train_r_filtered_rows))
-
-# Keep Parent items with a high number of ratings. Above 1st Quartile. 
-training <- train_r_filtered_rows[, colCounts(train_r_filtered_rows) > 5]
-
-
-# Updated row and column count summaries for training matrix. 
-summary(rowCounts(training))
-summary(colCounts(training))
-summary(rowMeans(training))
-summary(colMeans(training))
-
+# Keep Parent items with a high number of ratings. Above median.
+training <- train_r[, colCounts(train_r) > 9]
+training_items <- dimnames(training)[[2]]
+training
 str(training)
-# These are the Visitors in our training dataset. Need to keep only these ones in our testing dataset.
-dimnames(training)[[1]] # users
-dimnames(training)[[2]] # parent items.
 
 
 # coerce our testing sparseMatrix, testing_matrix into a realRatingMatrix object
 test_r <- as(testing_matrix, "realRatingMatrix")
 test_r
-
+summary(rowCounts(test_r))
+summary(colCounts(test_r))
 str(test_r)
-training_users <- dimnames(training)[[1]]
-training_items <- dimnames(training)[[2]]
-testing <- test_r[dimnames(test_r)[[1]] %in% training_users, 
-                  dimnames(test_r)[[2]] %in% training_items]
 
+# identify which items are in common between both training and test_r
+common_train_test_items <- intersect(training_items, dimnames(test_r)[[2]])
 
-# Updated row and column count summaries for testing matrix. 
-summary(rowCounts(testing))
-summary(colCounts(testing))
-summary(rowMeans(testing))
-summary(colMeans(testing))
+# update training and test_r so that each matrix has the same items columns.
+training <- training[, dimnames(training)[[2]] %in% common_train_test_items]
+testing <- test_r[, dimnames(test_r)[[2]] %in% common_train_test_items]
 
-# need to delete test users with not enough ratings in the last month. 
-# Filter out the test users without 20 or more different items rated in last month. 
-# this is around the 1st quartile of rowcounts in the test_r matrix.
-testing <- test_r[rowCounts(test_r) >= 20, ]
-testing
+all.equal(dimnames(training)[[1]], dimnames(testing)[[1]]) # all users are same in train vs test.
+all.equal(dimnames(training)[[2]], dimnames(testing)[[2]]) # all items are same in train vs test.
+
+# Updated row and column count summaries for training, testing matrices 
+summary(rowCounts(training)); summary(rowCounts(testing))
+summary(colCounts(training)); summary(colCounts(testing)); 
+summary(rowMeans(training)); summary(rowMeans(testing))
+
 
 # Fit Best User-based CF model, get test predictions -------------------------------
 # ubcf_cosine_50nn won out vs other UBCF models in separate script (collab_filtering_smaller_samples.R)
@@ -278,3 +248,14 @@ top20_predictions <- predict(object = ubcf_model,
                              newdata = testing, 
                              type = "topNList", 
                              n = 20)
+
+# Calculate predictive accuracy, by user. 
+testset_accuracy_by_user <- calcPredictionAccuracy(top20_predictions, 
+                                                 getData(ubcf_best_scheme, "unknown"),
+                                                 given = 5,
+                                                 goodRating = 3,
+                                                 byUser = TRUE)
+
+testset_accuracy_by_user <- as.data.frame(testset_accuracy_by_user) %>%
+  mutate(VisitorId = row.names(.)) %>%
+  select(VisitorId, everything())
