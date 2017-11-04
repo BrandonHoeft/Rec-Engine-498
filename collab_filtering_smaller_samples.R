@@ -274,3 +274,48 @@ ubcf_results[["ubcf_pearson_25nn"]]
 # ubcf_cosine_50nn won out on a train/test scheme on a subsample of user records. 
 # will refit a single train/test scheme.
 
+set.seed(2017)
+ubcf_best_scheme <- evaluationScheme(real_r_filtered_rows_cols,
+                                method = "split", # random train/test scheme
+                                train = 0.75,
+                                k = 1,
+                                given = 5,  # how many records for a test user will learn the model? 
+                                goodRating = 3) # threshold for classification. Just above Median Total_rating_max10.
+ubcf_best_scheme
+
+# Fit the top performing ubcf_cosine_50nn model as single train/test scheme. 
+ubcf_model <- getData(ubcf_best_scheme, "train") %>%
+  Recommender(method = "UBCF", parameter = list(method = "cosine", 
+                                                nn = 50,
+                                                normalize = "center"))
+
+# Make recommendation predictions on testing records.
+top20_predictions <- predict(ubcf_model, 
+                                 getData(ubcf_best_scheme, "known"), 
+                                 type = "topNList", 
+                                 n = 20)
+
+ubcf_model_accuracy_by_user <- calcPredictionAccuracy(top20_predictions, 
+                                         getData(ubcf_best_scheme, "unknown"),
+                                         given = 5,
+                                         goodRating = 3,
+                                         byUser = TRUE)
+
+ubcf_model_accuracy_by_user <- as.data.frame(ubcf_model_accuracy_by_user) %>%
+  mutate(VisitorId = row.names(.)) %>%
+  select(VisitorId, everything())
+
+# Identify which test users rated the most different items, bring that data in.
+items_count_per_user <- data.frame(VisitorId = row.names(real_r_filtered_rows_cols),
+                                   items_count = rowCounts(real_r_filtered_rows_cols))
+
+ubcf_model_accuracy_by_user <- inner_join(ubcf_model_accuracy_by_user, items_count_per_user,
+                                  by = 'VisitorId') %>%
+  arrange(desc(items_count))
+ubcf_model_accuracy_by_user <- arrange(ubcf_model_accuracy_by_user, desc(items_count))
+head(ubcf_model_accuracy_by_user)
+
+# Can get top_N items and their ratings if want that. 
+str(top20_predictions)
+# The top 20 recommended items for the 5 
+top20_predictions@items[['725371350']]
