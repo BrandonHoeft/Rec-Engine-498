@@ -66,13 +66,34 @@ user_items <- user_items %>%
 # Summarize the dates ----------------------------------------------------------
 summary(user_items$ActionDate)
 
+# Identify users who made purchases before July 2017 and in/after July 2017 ----
+user_activity_bw_periods <- user_items %>%
+  mutate(pre_July17_activity = ifelse(ActionDate < mdy('7/1/2017'), "before_jul17", "after_jul17")) %>%
+  group_by(VisitorId, pre_July17_activity) %>%
+  distinct(Parent) %>% # only keep distinct parent per visitor.
+  summarize(unique_parent_count = n()) %>%
+  ungroup() %>%
+  spread(key = pre_July17_activity, value = unique_parent_count)
+
+summary(user_activity_bw_periods$before_jul17)
+summary(user_activity_bw_periods$after_jul17)
+
+# Keep users interacting with > 1st quartile count of different Parent items
+#   pre-July 2017 (Training period) and in/after-July 2017 (testing period)
+keep_visitor_index <- user_activity_bw_periods %>%
+  filter(before_jul17 > 19 & after_jul17 > 13) %>%
+  select(VisitorId) %>%
+  mutate(VisitorId = as.character(VisitorId))
+keep_visitor_index <- keep_visitor_index$VisitorId
 
 # Split the data into 6-months vs 1-month --------------------------------------
 user_items_first_6month <- user_items %>%
-  filter(ActionDate < mdy('8/1/2017'))
+  filter(ActionDate < mdy('7/1/2017'), # Feb - Jun used for training.
+         VisitorId %in% keep_visitor_index) # Visitors with enough different Parent interactions pre July17
 
 user_items_lastmonth <- user_items %>%
-  filter(ActionDate >= mdy('8/1/2017'))
+  filter(ActionDate >= mdy('7/1/2017'), # Jul - Aug used for testing.
+         VisitorId %in% keep_visitor_index) # Visitors with enough different Parent interactions during/after July17
 
 
 # Pre-process the ratings scheme -----------------------------------------------
@@ -223,15 +244,15 @@ test_r
 str(test_r)
 training_users <- dimnames(training)[[1]]
 training_items <- dimnames(training)[[2]]
-test_r <- test_r[dimnames(test_r)[[1]] %in% training_users, 
+testing <- test_r[dimnames(test_r)[[1]] %in% training_users, 
                   dimnames(test_r)[[2]] %in% training_items]
 
 
 # Updated row and column count summaries for testing matrix. 
-summary(rowCounts(test_r))
-summary(colCounts(test_r))
-summary(rowMeans(test_r))
-summary(colMeans(test_r))
+summary(rowCounts(testing))
+summary(colCounts(testing))
+summary(rowMeans(testing))
+summary(colMeans(testing))
 
 # need to delete test users with not enough ratings in the last month. 
 # Filter out the test users without 20 or more different items rated in last month. 
@@ -243,6 +264,17 @@ testing
 # ubcf_cosine_50nn won out vs other UBCF models in separate script (collab_filtering_smaller_samples.R)
 
 # Fit the top performing ubcf_cosine_50nn model as single model. 
-ubcf_model <- Recommender(method = "UBCF", parameter = list(method = "cosine", 
-                                                nn = 50,
-                                                normalize = "center"))
+ubcf_model <- Recommender(data = training, 
+                          method = "UBCF", 
+                          parameter = list(method = "cosine",
+                                           nn = 50,
+                                           normalize = "center"))
+
+ubcf_model
+
+# Recommend new Movies to the same users, but based on their unseen activity 
+# from 1-month later. 
+top20_predictions <- predict(object = ubcf_model, 
+                             newdata = testing, 
+                             type = "topNList", 
+                             n = 20)
