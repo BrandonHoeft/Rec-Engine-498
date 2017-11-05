@@ -98,9 +98,9 @@ user_items_first_5month <- user_items %>%
 # which users had the most click activity in the first 5 months? 
 total_clicks_summary <- user_items_first_5month %>%
   group_by(VisitorId) %>%
-  summarize(total_clicks = sum(ActionCount),
-            different_parent_items = length(unique(Parent))) %>%
-  arrange(desc(different_parent_items))
+  summarize(total_clicks_first_5month = sum(ActionCount),
+            different_parents_first_5month = length(unique(Parent))) %>%
+  arrange(desc(different_parents_first_5month))
 
 
 user_items_last_2month <- user_items %>%
@@ -262,6 +262,15 @@ ubcf_model
 #s3load("ubcf_top20_predictions.Rdata", bucket = "pred498team5")
 #str(ubcf_top20_predictions)
 
+
+
+
+
+
+
+
+
+# Obtain Results, determine Top N predictions vs. actual purchases last 2-months ----------------
 test_recommendations <- data.frame(VisitorId = character(length = nrow(testing)),
                                    rec1 = integer(length = nrow(testing)),
                                    rec2 = integer(length = nrow(testing)), 
@@ -310,7 +319,7 @@ for(i in 1:nrow(testing)) {
 }
 
 # convert data from wide format to long format.
-test_recommendations_tidy <- test_recommendations %>%
+test_recommendations_tidy <- test_recommendations %>% 
   gather(key = rec_number, value = parent_index, -VisitorId)
 
 # prepare the item labels so they can be mapped to the item indices in the predicted recommendations
@@ -322,8 +331,8 @@ item_labels_df <- data.frame(parent_index = 1:length(item_labels),
 # left join the parent item label to test_recommendations_tidy.
 test_recommendations_update <- test_recommendations_tidy %>%
   left_join(item_labels_df, by = 'parent_index') %>%
-  mutate(rec_number_ = as.numeric(gsub("[^0-9]", "", rec_number))) %>% # strip off the string.
-  arrange(VisitorId, rec_number_)
+  mutate(rec_number = as.numeric(gsub("[^0-9]", "", rec_number))) %>% # strip off the string.
+  arrange(VisitorId, rec_number)
 
 
 user1 <- ubcf_top20_predictions@items[[1]]
@@ -340,26 +349,38 @@ all.equal(items_user1,
 test_users_true_positives <- user_ratings_last_2month %>%
   filter(total_rating_max10 >= 3) %>% # this was threshold used for 'Good Rating'
   select(VisitorId, Parent, total_rating_max10) %>%
-  mutate(parent_actual = Parent) %>%
-  arrange(VisitorId, desc(total_rating_max10))
+  rename(known_rating = total_rating_max10) %>%
+  mutate(known_parent = Parent) %>%
+  arrange(VisitorId, desc(known_rating))
 
 str(test_users_true_positives)
 
-# left join the true positives and 
-test_recommendations_update2 <- test_recommendations_update %>%
+# left join the true positives from the last 2_months of test data to our
+# predictions of top 20 recommendations for each visitor. Also left join each
+# user's first 5_month's summary of total clicks and different parent items data. 
+test_recommendations_update <- test_recommendations_update %>%
   left_join(test_users_true_positives, by = c('VisitorId' = 'VisitorId',
                                               'parent_rec' = 'Parent')) %>%
   left_join(total_clicks_summary, by = 'VisitorId')
 
-test_summary <- test_recommendations_update2 %>%
+ubcf_test_recommendations <- test_recommendations_update %>%
   group_by(VisitorId) %>%
-  rename(total_clicks_summary = total_clicks) %>%
-  mutate(true_positives_summary = sum(!is.na(parent_actual)),
-            precision_summary = round(true_positives_summary / n(), 2)) %>%
+  mutate(test_true_positives = sum(!is.na(known_parent)),
+         test_precision = round(test_true_positives / n(), 2)) %>%
   ungroup() %>%
-  arrange(desc(true_positives_summary))
+  arrange(desc(test_true_positives))
+#s3save(ubcf_test_recommendations, bucket = "pred498team5", object = "ubcf_test_recommendations.Rdata")
+#s3load("ubcf_test_recommendations.Rdata", bucket = "pred498team5")
 
-summary(test_summary$precision)
 
-test_summary %>%
-  filter(VisitorId == '8422497571226')
+ubcf_test_precision_summary <- ubcf_test_recommendations %>%
+  distinct(VisitorId, test_precision) %>%
+  summarize(min = min(test_precision),
+            first_quartile = quantile(test_precision, 0.25),
+            median = median(test_precision),
+            mean = mean(test_precision),
+            third_quartile = quantile(test_precision, 0.75),
+            max = max(test_precision))
+
+#s3save(ubcf_test_precision_summary, bucket = "pred498team5", object = "ubcf_test_precision_summary.Rdata")
+#s3load("ubcf_test_precision_summary", bucket = "pred498team5")
