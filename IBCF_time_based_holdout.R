@@ -202,11 +202,139 @@ training
 
 # Fit Best Item-based CF model, get test predictions -------------------------------
 
-# Fit Taylor's best IBCF model on the first 5-months training records.
+# Fit Taylor's best IBCF model on the first 5-months training records. takes about 30+ min to run.
 ibcf_model <- Recommender(data = training, 
                           method = "IBCF", 
                           parameter = list(method = "cosine",
-                                           k = k=350,
+                                           k = 350,
                                            normalize = "center"))
+s3save(ibcf_model, bucket = "pred498team5", object = "ibcf_model.Rdata")
+#s3load("ubcf_top20_predictions.Rdata", bucket = "pred498team5")
 
 
+# Recommend new parent items to the same users, based on their original information.
+# We'll evaluate predictions against the items they rated in the last 2_months. 
+ibcf_top20_predictions <- predict(object = ibcf_model, 
+                             newdata = training, 
+                             type = "topNList", 
+                             n = 20)
+s3save(ibcf_top20_predictions, bucket = "pred498team5", object = "ibcf_top20_predictions.Rdata")
+#s3load("ibcf_top20_predictions.Rdata", bucket = "pred498team5")
+str(ibcf_top20_predictions)
+
+
+
+# Obtain Results, determine Top N predictions vs. actual purchases last 2-months ----------------
+test_recommendations <- data.frame(VisitorId = character(length = nrow(training)),
+                                   rec1 = integer(length = nrow(training)),
+                                   rec2 = integer(length = nrow(training)), 
+                                   rec3 = integer(length = nrow(training)), 
+                                   rec4 = integer(length = nrow(training)), 
+                                   rec5 = integer(length = nrow(training)), 
+                                   rec6 = integer(length = nrow(training)), 
+                                   rec7 = integer(length = nrow(training)), 
+                                   rec8 = integer(length = nrow(training)), 
+                                   rec9 = integer(length = nrow(training)), 
+                                   rec10 = integer(length = nrow(training)), 
+                                   rec11 = integer(length = nrow(training)), 
+                                   rec12 = integer(length = nrow(training)),
+                                   rec13 = integer(length = nrow(training)),
+                                   rec14 = integer(length = nrow(training)),
+                                   rec15 = integer(length = nrow(training)),
+                                   rec16 = integer(length = nrow(training)),
+                                   rec17 = integer(length = nrow(training)),
+                                   rec18 = integer(length = nrow(training)),
+                                   rec19 = integer(length = nrow(training)),
+                                   rec20 = integer(length = nrow(training)),
+                                   stringsAsFactors=FALSE) 
+
+for(i in 1:nrow(training)) {
+  test_recommendations$VisitorId[i] <- dimnames(training)[[1]][i]
+  test_recommendations$rec1[i]  <- ibcf_top20_predictions@items[[i]][1]
+  test_recommendations$rec2[i]  <- ibcf_top20_predictions@items[[i]][2]
+  test_recommendations$rec3[i]  <- ibcf_top20_predictions@items[[i]][3]
+  test_recommendations$rec4[i]  <- ibcf_top20_predictions@items[[i]][4]
+  test_recommendations$rec5[i]  <- ibcf_top20_predictions@items[[i]][5]
+  test_recommendations$rec6[i]  <- ibcf_top20_predictions@items[[i]][6]
+  test_recommendations$rec7[i]  <- ibcf_top20_predictions@items[[i]][7]
+  test_recommendations$rec8[i]  <- ibcf_top20_predictions@items[[i]][8]
+  test_recommendations$rec9[i]  <- ibcf_top20_predictions@items[[i]][9]
+  test_recommendations$rec10[i] <- ibcf_top20_predictions@items[[i]][10]
+  test_recommendations$rec11[i] <- ibcf_top20_predictions@items[[i]][11]
+  test_recommendations$rec12[i] <- ibcf_top20_predictions@items[[i]][12]
+  test_recommendations$rec13[i] <- ibcf_top20_predictions@items[[i]][13]
+  test_recommendations$rec14[i] <- ibcf_top20_predictions@items[[i]][14]
+  test_recommendations$rec15[i] <- ibcf_top20_predictions@items[[i]][15]
+  test_recommendations$rec16[i] <- ibcf_top20_predictions@items[[i]][16]
+  test_recommendations$rec17[i] <- ibcf_top20_predictions@items[[i]][17]
+  test_recommendations$rec18[i] <- ibcf_top20_predictions@items[[i]][18]
+  test_recommendations$rec19[i] <- ibcf_top20_predictions@items[[i]][19]
+  test_recommendations$rec20[i] <- ibcf_top20_predictions@items[[i]][20]
+}
+
+
+# convert data from wide format to long format.
+test_recommendations_tidy <- test_recommendations %>% 
+  gather(key = rec_number, value = parent_index, -VisitorId)
+
+# prepare the item labels so they can be mapped to the item indices in the predicted recommendations
+# ibcf_top20_predictions S4 object.
+item_labels <- as.character(ibcf_top20_predictions@itemLabels)
+item_labels_df <- data.frame(parent_index = 1:length(item_labels),
+                             parent_rec = item_labels)
+
+# left join the parent item label to test_recommendations_tidy.
+test_recommendations_update <- test_recommendations_tidy %>%
+  left_join(item_labels_df, by = 'parent_index') %>%
+  mutate(rec_number = as.numeric(gsub("[^0-9]", "", rec_number))) %>% # strip off the string.
+  arrange(VisitorId, rec_number)
+
+# values from the ibcf_top20_predictions S4 object for user1 match the parent
+# labels for the first user in the test_recommendations_update dataset.
+user1 <- ibcf_top20_predictions@items[[1]]
+items_user1 <- ibcf_top20_predictions@itemLabels[user1]
+items_user1
+
+all.equal(items_user1, 
+          as.character(test_recommendations_update[test_recommendations_update$VisitorId == '1000434402046', ]$parent_rec))
+
+
+# Time to determine which of the top 20 recommendations for each user in the 
+# test dataset was a true positive vs. a false positive
+test_users_true_positives <- user_ratings_last_2month %>%
+  filter(total_rating_max10 >= 3) %>% # this was threshold used for 'Good Rating'
+  select(VisitorId, Parent, total_rating_max10) %>%
+  rename(known_rating = total_rating_max10) %>%
+  mutate(known_parent = Parent) %>% # we'll want this as a sep. column after joining. lines 363-366
+  arrange(VisitorId, desc(known_rating))
+
+str(test_users_true_positives)
+
+# left join the true positives from the last 2_months of test data to our
+# predictions of top 20 recommendations for each visitor. Also left join each
+# user's first 5_month's summary of total clicks and different parent items data. 
+test_recommendations_update <- test_recommendations_update %>%
+  left_join(test_users_true_positives, by = c('VisitorId' = 'VisitorId',
+                                              'parent_rec' = 'Parent')) %>%
+  left_join(total_clicks_summary, by = 'VisitorId')
+
+ibcf_test_recommendations <- test_recommendations_update %>%
+  group_by(VisitorId) %>%
+  mutate(test_true_positives = sum(!is.na(known_parent)),
+         test_precision = round(test_true_positives / n(), 2)) %>%
+  ungroup() %>%
+  arrange(desc(test_true_positives))
+s3save(ibcf_test_recommendations, bucket = "pred498team5", object = "ibcf_test_recommendations.Rdata")
+#s3load("ibcf_test_recommendations.Rdata", bucket = "pred498team5")
+
+ibcf_test_precision_summary <- ibcf_test_recommendations %>%
+  distinct(VisitorId, test_precision) %>%
+  summarize(min = min(test_precision),
+            first_quartile = quantile(test_precision, 0.25),
+            median = median(test_precision),
+            mean = mean(test_precision),
+            third_quartile = quantile(test_precision, 0.75),
+            max = max(test_precision))
+
+s3save(ibcf_test_precision_summary, bucket = "pred498team5", object = "ibcf_test_precision_summary.Rdata")
+#s3load("ibcf_test_precision_summary.Rdata", bucket = "pred498team5")
