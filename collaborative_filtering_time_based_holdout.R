@@ -383,4 +383,4 @@ ubcf_test_precision_summary <- ubcf_test_recommendations %>%
             max = max(test_precision))
 
 #s3save(ubcf_test_precision_summary, bucket = "pred498team5", object = "ubcf_test_precision_summary.Rdata")
-#s3load("ubcf_test_precision_summary", bucket = "pred498team5")
+#s3load("ubcf_test_precision_summary.Rdata", bucket = "pred498team5")
