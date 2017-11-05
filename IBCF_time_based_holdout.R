@@ -206,9 +206,9 @@ training
 ibcf_model <- Recommender(data = training, 
                           method = "IBCF", 
                           parameter = list(method = "cosine",
-                                           k = 350,
+                                           k = 25,
                                            normalize = "center"))
-s3save(ibcf_model, bucket = "pred498team5", object = "ibcf_model.Rdata")
+#s3save(ibcf_model, bucket = "pred498team5", object = "ibcf_model.Rdata")
 #s3load("ubcf_top20_predictions.Rdata", bucket = "pred498team5")
 
 
