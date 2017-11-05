@@ -13,8 +13,8 @@ knitr::opts_chunk$set(fig.width=8, fig.height=6, echo=FALSE, warning=FALSE, mess
 # specify personal account keys as environment variables so I can read my s3 object(s) from AWS. 
 
 # DO NOT DO NOT DO NOT DO NOT DO NOT SAVE KEY in code or render in output!!!! Could compromise AWS account. 
-Sys.setenv("AWS_ACCESS_KEY_ID" = "AKIAIRUBKOJVXNTTSBMA",
-          "AWS_SECRET_ACCESS_KEY" = "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")
+Sys.setenv("AWS_ACCESS_KEY_ID" = "",
+          "AWS_SECRET_ACCESS_KEY" = "")
 
 # items: part number, parent, catalogue, attributes/values.
 items <- s3read_using(FUN = read_table2, 
