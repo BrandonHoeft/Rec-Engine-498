@@ -95,9 +95,18 @@ user_items_first_5month <- user_items %>%
   filter(ActionDate < mdy('7/1/2017'), # Feb - Jun used for training.
          VisitorId %in% keep_visitor_index) # Visitors with enough different Parent interactions pre July17
 
+# which users had the most click activity in the first 5 months? 
+total_clicks_summary <- user_items_first_5month %>%
+  group_by(VisitorId) %>%
+  summarize(total_clicks = sum(ActionCount),
+            different_parent_items = length(unique(Parent))) %>%
+  arrange(desc(different_parent_items))
+
+
 user_items_last_2month <- user_items %>%
   filter(ActionDate >= mdy('7/1/2017'), # Jul - Aug used for testing.
          VisitorId %in% keep_visitor_index) # Visitors with enough different Parent interactions during/after July17
+
 
 
 # Pre-process the ratings scheme -----------------------------------------------
@@ -339,14 +348,16 @@ str(test_users_true_positives)
 # left join the true positives and 
 test_recommendations_update2 <- test_recommendations_update %>%
   left_join(test_users_true_positives, by = c('VisitorId' = 'VisitorId',
-                                              'parent_rec' = 'Parent'))
+                                              'parent_rec' = 'Parent')) %>%
+  left_join(total_clicks_summary, by = 'VisitorId')
 
 test_summary <- test_recommendations_update2 %>%
   group_by(VisitorId) %>%
+  rename(total_clicks_summary = total_clicks) %>%
   mutate(true_positives_summary = sum(!is.na(parent_actual)),
-            precision_summary = round(true_positives / n(), 2)) %>%
+            precision_summary = round(true_positives_summary / n(), 2)) %>%
   ungroup() %>%
-  arrange(desc(true_positives))
+  arrange(desc(true_positives_summary))
 
 summary(test_summary$precision)
 
