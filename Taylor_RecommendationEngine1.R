@@ -13,8 +13,8 @@ knitr::opts_chunk$set(fig.width=8, fig.height=6, echo=FALSE, warning=FALSE, mess
 # specify personal account keys as environment variables so I can read my s3 object(s) from AWS. 
 
 # DO NOT DO NOT DO NOT DO NOT DO NOT SAVE KEY in code or render in output!!!! Could compromise AWS account. 
-Sys.setenv("AWS_ACCESS_KEY_ID" = "",
-          "AWS_SECRET_ACCESS_KEY" = "")
+Sys.setenv("AWS_ACCESS_KEY_ID" = "AKIAIRUBKOJVXNTTSBMA",
+          "AWS_SECRET_ACCESS_KEY" = "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")
 
 # items: part number, parent, catalogue, attributes/values.
 items <- s3read_using(FUN = read_table2, 
@@ -109,6 +109,8 @@ s3save(user_ratings, object="user_ratings.Rdata", bucket = "pred498engine")
 ### Setting up a User Ratings Matrix
 
 library(Matrix)
+user_ratings <- new.env()
+s3load(object="user_ratings.Rdata", bucket = "pred498engine", envir = user_ratings)
 # sparse ratings matrix.
 # https://stackoverflow.com/questions/28430674/create-sparse-matrix-from-data-frame?noredirect=1&lq=1
 # the VisitorId and Parent need to be 1 based indices when creating a matrix. 
@@ -232,13 +234,15 @@ model_IBCF <- Recommender(getData(ibcf_scheme, "train"), method = "IBCF",
                      param=list(normalize = "center", method="Cosine", k=350))
 
 ibcf1_results <- predict(model_IBCF, getData(ibcf_scheme, "known"), type = "topNList")
-s3load("ibcf1_results.Rdata", bucket = "pred498engine")
+s3load("ibcf_results.Rdata", bucket = "pred498engine", envir = ibcf_results)
+
 ibcf1_results
 
 rmse_IBCF <- calcPredictionAccuracy(prediction_IBCF, getData(ibcf_scheme, "unknown"), goodRating = 3, given = 5)[1]
 rmse_IBCF #0.1410256 #this was all with set.seed(123), switched it to stay consistent with Brandons models
 /'
-
+s3load("ibcf_results.Rdata", bucket = "pred498engine")
+ibcf_results
 ### Compare & Evaluate the IBCF Models
 plot(ibcf_results, annotate=TRUE) #ROC curve
 
@@ -294,3 +298,26 @@ rmse_slopeone #2.41168 not very good
 #------------------------------------------------------------------------------
 # Hybrid
 #------------------------------------------------------------------------------
+## mix popular movies with a random recommendations for diversity and
+## rerecommend some movies the user liked.
+hybrid_scheme <- evaluationScheme(real_r_filtered_rows_cols,
+                                method = "split", # random train/test scheme
+                                train = 0.75,
+                                k = 1,
+                                given = 5,  # how many records for a test user will learn the model? 
+                                goodRating = 3) # threshold for classification. Just above Median Total_rating_max10.
+
+ev <- evaluate(hybrid_scheme, "hybrid", type="topNlist")
+ptm = proc.time()
+
+hybrid_rec <- HybridRecommender(
+  Recommender(getData(hybrid_scheme, "train"), method = "POPULAR"),
+  Recommender(getData(hybrid_scheme, "train"), method = "UBCF"),
+  Recommender(getData(hybrid_scheme, "train"), method = "IBCF"),
+  weights = c(.4, .3, .3)
+)
+proc.time() - ptm; rm(ptm)
+
+p_hybrid <- predict(hybrid_rec, getData(hybrid_scheme, "known"), type = "topNList")
+error_hybrid<-calcPredictionAccuracy(p_hybrid, getData(hybrid_scheme, "unknown"), given = 5, goodRating = 3)
+error_hybrid
