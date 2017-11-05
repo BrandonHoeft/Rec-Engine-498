@@ -242,15 +242,16 @@ ubcf_model <- Recommender(data = training,
                                            normalize = "center"))
 ubcf_model
 
-# Recommend new Movies to the same users, but based on their unseen activity 
-# from 2-month later. 
+# Recommend new parent items to the same users, based on their original information.
+# note: 1 of their 50 nn may be themselves. We'll evaluate predictions against
+# the items they rated in the last 2_months. 
 #ubcf_top20_predictions <- predict(object = ubcf_model, 
-#                             newdata = testing, 
+#                             newdata = training, 
 #                             type = "topNList", 
 #                             n = 20)
 #s3save(ubcf_top20_predictions, bucket = "pred498team5", object = "ubcf_top20_predictions.Rdata")
-s3load("ubcf_top20_predictions.Rdata", bucket = "pred498team5")
-str(ubcf_top20_predictions)
+#s3load("ubcf_top20_predictions.Rdata", bucket = "pred498team5")
+#str(ubcf_top20_predictions)
 
 test_recommendations <- data.frame(VisitorId = character(length = nrow(testing)),
                                    rec1 = integer(length = nrow(testing)),
@@ -299,12 +300,15 @@ for(i in 1:nrow(testing)) {
   test_recommendations$rec20[i]  <-ubcf_top20_predictions@items[[i]][20]
 }
 
+# convert data from wide format to long format.
 test_recommendations_tidy <- test_recommendations %>%
   gather(key = rec_number, value = parent_index, -VisitorId)
 
+# prepare the item labels so they can be mapped to the item indices in the predicted recommendations
+# ubcf_top20_predictions S4 object.
 item_labels <- as.character(ubcf_top20_predictions@itemLabels)
 item_labels_df <- data.frame(parent_index = 1:length(item_labels),
-                             parent = item_labels)
+                             parent_rec = item_labels)
 
 # left join the parent item label to test_recommendations_tidy.
 test_recommendations_update <- test_recommendations_tidy %>%
@@ -320,4 +324,31 @@ items_user1
 # values from the ubcf_top20_predictions S4 object for user1 match the parent
 # labels for the first user in the test_recommendations_update dataset.
 all.equal(items_user1, 
-          as.character(test_recommendations_update[test_recommendations_update$VisitorId == '1000434402046', ]$parent))
+          as.character(test_recommendations_update[test_recommendations_update$VisitorId == '1000434402046', ]$parent_rec))
+
+# Time to determine which of the top 20 recommendations for each user in the 
+# test dataset was a true positive vs. a false positive
+test_users_true_positives <- user_ratings_last_2month %>%
+  filter(total_rating_max10 >= 3) %>% # this was threshold used for 'Good Rating'
+  select(VisitorId, Parent, total_rating_max10) %>%
+  mutate(parent_actual = Parent) %>%
+  arrange(VisitorId, desc(total_rating_max10))
+
+str(test_users_true_positives)
+
+# left join the true positives and 
+test_recommendations_update2 <- test_recommendations_update %>%
+  left_join(test_users_true_positives, by = c('VisitorId' = 'VisitorId',
+                                              'parent_rec' = 'Parent'))
+
+test_summary <- test_recommendations_update2 %>%
+  group_by(VisitorId) %>%
+  mutate(true_positives_summary = sum(!is.na(parent_actual)),
+            precision_summary = round(true_positives / n(), 2)) %>%
+  ungroup() %>%
+  arrange(desc(true_positives))
+
+summary(test_summary$precision)
+
+test_summary %>%
+  filter(VisitorId == '8422497571226')
