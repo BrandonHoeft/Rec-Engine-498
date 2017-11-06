@@ -242,30 +242,29 @@ ubcf_model
 
 # Build a Hybrid Recommender System of UBCF, IBCF, popular, re-recommended ------
 
-
 hybrid_rec_model <- HybridRecommender(
   ubcf_model,
   ibcf_model,
-  Recommender(train, method = "RERECOMMEND"),
-  Recommender(train, method = "POPULAR"),
-  weights = c(.25, .25, .25, .25)
+  Recommender(training, method = "RERECOMMEND"),
+  #Recommender(training, method = "POPULAR"),
+  weights = c(.5, .25, .25)
 )
 
-
-
-
+hybrid_rec_model
+str(hybrid_rec_model)
+getModel(hybrid_rec_model)
 
 
 
 # Recommend new parent items to the same users, based on their original information.
-# We'll evaluate predictions against the items they rated in the last 2_months. 
-ibcf_top20_predictions <- predict(object = ibcf_model, 
+# We'll evaluate predictions against the items they rated in the last 2_months. Takes about 30 min to run.
+hybrid_top20_predictions <- predict(object = hybrid_rec_model, 
                                   newdata = training, 
                                   type = "topNList", 
                                   n = 20)
-s3save(ibcf_top20_predictions, bucket = "pred498team5", object = "ibcf_top20_predictions.Rdata")
-#s3load("ibcf_top20_predictions.Rdata", bucket = "pred498team5")
-str(ibcf_top20_predictions)
+#s3save(hybrid_top20_predictions, bucket = "pred498team5", object = "hybrid_top20_predictions.Rdata")
+#s3load("hybrid_top20_predictions.Rdata", bucket = "pred498team5")
+str(hybrid_top20_predictions)
 
 
 
@@ -295,26 +294,26 @@ test_recommendations <- data.frame(VisitorId = character(length = nrow(training)
 
 for(i in 1:nrow(training)) {
   test_recommendations$VisitorId[i] <- dimnames(training)[[1]][i]
-  test_recommendations$rec1[i]  <- ibcf_top20_predictions@items[[i]][1]
-  test_recommendations$rec2[i]  <- ibcf_top20_predictions@items[[i]][2]
-  test_recommendations$rec3[i]  <- ibcf_top20_predictions@items[[i]][3]
-  test_recommendations$rec4[i]  <- ibcf_top20_predictions@items[[i]][4]
-  test_recommendations$rec5[i]  <- ibcf_top20_predictions@items[[i]][5]
-  test_recommendations$rec6[i]  <- ibcf_top20_predictions@items[[i]][6]
-  test_recommendations$rec7[i]  <- ibcf_top20_predictions@items[[i]][7]
-  test_recommendations$rec8[i]  <- ibcf_top20_predictions@items[[i]][8]
-  test_recommendations$rec9[i]  <- ibcf_top20_predictions@items[[i]][9]
-  test_recommendations$rec10[i] <- ibcf_top20_predictions@items[[i]][10]
-  test_recommendations$rec11[i] <- ibcf_top20_predictions@items[[i]][11]
-  test_recommendations$rec12[i] <- ibcf_top20_predictions@items[[i]][12]
-  test_recommendations$rec13[i] <- ibcf_top20_predictions@items[[i]][13]
-  test_recommendations$rec14[i] <- ibcf_top20_predictions@items[[i]][14]
-  test_recommendations$rec15[i] <- ibcf_top20_predictions@items[[i]][15]
-  test_recommendations$rec16[i] <- ibcf_top20_predictions@items[[i]][16]
-  test_recommendations$rec17[i] <- ibcf_top20_predictions@items[[i]][17]
-  test_recommendations$rec18[i] <- ibcf_top20_predictions@items[[i]][18]
-  test_recommendations$rec19[i] <- ibcf_top20_predictions@items[[i]][19]
-  test_recommendations$rec20[i] <- ibcf_top20_predictions@items[[i]][20]
+  test_recommendations$rec1[i]  <- hybrid_top20_predictions@items[[i]][1]
+  test_recommendations$rec2[i]  <- hybrid_top20_predictions@items[[i]][2]
+  test_recommendations$rec3[i]  <- hybrid_top20_predictions@items[[i]][3]
+  test_recommendations$rec4[i]  <- hybrid_top20_predictions@items[[i]][4]
+  test_recommendations$rec5[i]  <- hybrid_top20_predictions@items[[i]][5]
+  test_recommendations$rec6[i]  <- hybrid_top20_predictions@items[[i]][6]
+  test_recommendations$rec7[i]  <- hybrid_top20_predictions@items[[i]][7]
+  test_recommendations$rec8[i]  <- hybrid_top20_predictions@items[[i]][8]
+  test_recommendations$rec9[i]  <- hybrid_top20_predictions@items[[i]][9]
+  test_recommendations$rec10[i] <- hybrid_top20_predictions@items[[i]][10]
+  test_recommendations$rec11[i] <- hybrid_top20_predictions@items[[i]][11]
+  test_recommendations$rec12[i] <- hybrid_top20_predictions@items[[i]][12]
+  test_recommendations$rec13[i] <- hybrid_top20_predictions@items[[i]][13]
+  test_recommendations$rec14[i] <- hybrid_top20_predictions@items[[i]][14]
+  test_recommendations$rec15[i] <- hybrid_top20_predictions@items[[i]][15]
+  test_recommendations$rec16[i] <- hybrid_top20_predictions@items[[i]][16]
+  test_recommendations$rec17[i] <- hybrid_top20_predictions@items[[i]][17]
+  test_recommendations$rec18[i] <- hybrid_top20_predictions@items[[i]][18]
+  test_recommendations$rec19[i] <- hybrid_top20_predictions@items[[i]][19]
+  test_recommendations$rec20[i] <- hybrid_top20_predictions@items[[i]][20]
 }
 
 
@@ -324,7 +323,7 @@ test_recommendations_tidy <- test_recommendations %>%
 
 # prepare the item labels so they can be mapped to the item indices in the predicted recommendations
 # ibcf_top20_predictions S4 object.
-item_labels <- as.character(ibcf_top20_predictions@itemLabels)
+item_labels <- as.character(hybrid_top20_predictions@itemLabels)
 item_labels_df <- data.frame(parent_index = 1:length(item_labels),
                              parent_rec = item_labels)
 
@@ -336,8 +335,8 @@ test_recommendations_update <- test_recommendations_tidy %>%
 
 # values from the ibcf_top20_predictions S4 object for user1 match the parent
 # labels for the first user in the test_recommendations_update dataset.
-user1 <- ibcf_top20_predictions@items[[1]]
-items_user1 <- ibcf_top20_predictions@itemLabels[user1]
+user1 <- hybrid_top20_predictions@items[[1]]
+items_user1 <- hybrid_top20_predictions@itemLabels[user1]
 items_user1
 
 all.equal(items_user1, 
@@ -363,16 +362,16 @@ test_recommendations_update <- test_recommendations_update %>%
                                               'parent_rec' = 'Parent')) %>%
   left_join(total_clicks_summary, by = 'VisitorId')
 
-ibcf_test_recommendations <- test_recommendations_update %>%
+hybrid_test_recommendations <- test_recommendations_update %>%
   group_by(VisitorId) %>%
   mutate(test_true_positives = sum(!is.na(known_parent)),
          test_precision = round(test_true_positives / n(), 2)) %>%
   ungroup() %>%
   arrange(desc(test_true_positives))
-s3save(ibcf_test_recommendations, bucket = "pred498team5", object = "ibcf_test_recommendations.Rdata")
-#s3load("ibcf_test_recommendations.Rdata", bucket = "pred498team5")
+#s3save(hybrid_test_recommendations, bucket = "pred498team5", object = "hybrid_test_recommendations.Rdata")
+#s3load("hybrid_test_recommendations.Rdata", bucket = "pred498team5")
 
-ibcf_test_precision_summary <- ibcf_test_recommendations %>%
+hybrid_test_precision_summary <- hybrid_test_recommendations %>%
   distinct(VisitorId, test_precision) %>%
   summarize(min = min(test_precision),
             first_quartile = quantile(test_precision, 0.25),
@@ -381,5 +380,5 @@ ibcf_test_precision_summary <- ibcf_test_recommendations %>%
             third_quartile = quantile(test_precision, 0.75),
             max = max(test_precision))
 
-s3save(ibcf_test_precision_summary, bucket = "pred498team5", object = "ibcf_test_precision_summary.Rdata")
-#s3load("ibcf_test_precision_summary.Rdata", bucket = "pred498team5")
+#s3save(hybrid_test_precision_summary, bucket = "pred498team5", object = "hybrid_test_precision_summary.Rdata")
+#s3load("hybrid_test_precision_summary.Rdata", bucket = "pred498team5")
