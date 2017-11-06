@@ -5,6 +5,12 @@ library(ggplot2)
 library(pryr) # memory usage functions
 library(Matrix)
 library(recommenderlab)
+library(recosystem)
+library(devtools)
+library(SlopeOne)
+library(SVDApproximation)
+library(data.table)
+library(RColorBrewer)
 
 
 colTypes = c("character", "character", "integer", "character",  
@@ -15,6 +21,19 @@ colTypes = c("character", "character", "integer", "character",
 
 user_ratings = read.csv("/Users/haydude/Development/mspa/498 - Capstone/data/webActivityRated.csv", header = TRUE)
 items = read.csv("/Users/haydude/Development/mspa/498 - Capstone/data/items.csv", header = TRUE)
+
+mcmratings = data_frame(user=user_ratings$VisitorId, item=user_ratings$Parent, rating=user_ratings$WeightedRating)
+mcmratings$item = as.numeric(mcmratings$item)
+mcmratings$user = as.numeric(as.factor(mcmratings$user))
+str(mcmratings)
+visualize_ratings(ratings_table = mcmratings)
+
+
+ 
+sparse_mcm = sparseMatrix(i = as.integer(as.factor(user_ratings$VisitorId)), 
+                          j = as.integer(as.factor(user_ratings$Parent)),
+                          x = user_ratings$WeightedRating)
+
 
 
 plot(density(user_ratings$AnyRating))
