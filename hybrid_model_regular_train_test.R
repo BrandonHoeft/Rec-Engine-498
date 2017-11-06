@@ -111,7 +111,6 @@ all.equal(levels(as.factor(user_ratings$Parent)),
 
 # RecommenderLab ---------------------------------------------------------------
 library(recommenderlab)
-recommenderRegistry$get_entries(dataType = "realRatingMatrix")
 
 
 # coerce our sparseMatrix, sparse_r into a realRatingMatrix object
@@ -167,6 +166,7 @@ real_r_filtered_rows_cols
 
 
 # Design a Model Evaluation Scheme ---------------------------------------------
+recommenderRegistry$get_entries(dataType = "realRatingMatrix")
 
 set.seed(2017)
 train_scheme <- evaluationScheme(real_r_filtered_rows_cols,
@@ -180,12 +180,12 @@ train_scheme
 
 # Build a Hybrid Recommender System of UBCF, IBCF, popular, re-recommended ------
 recommender_algorithms <- list(
-  "ubcf_cosine_50nn" = list(name = "UBCF",
+  "ubcf_recommender" = list(name = "UBCF",
                             param = list(method = "cosine", 
                                          nn = 50,
                                          normalize = "center")),
-  "ibcf_cosine_350k" = list(name = "IBCF",
-                             param = list(method = "cosine",
+  "ibcf_recommender" = list(name = "IBCF",
+                             param = list(method = "pearson",
                                           k = 350,
                                           normalize = "center")),
   "popular_recommender" = list(name = "POPULAR", param = NULL),
@@ -201,19 +201,23 @@ hybrid_rec_model <- HybridRecommender(
   Recommender(getData(train_scheme, "train"), 
               method = "IBCF",
               parameter = list(method = "pearson", 
-                               nn = 350,
+                               k = 350,
                                normalize = "center")),
   Recommender(getData(train_scheme, "train"), method = "POPULAR"),
   Recommender(getData(train_scheme, "train"), method = "RERECOMMEND"),
   weights = c(.3, .3, .1, .3)
 )
+s3save(hybrid_rec_model, bucket = "pred498finalmodel", object = "hybrid_rec_model.Rdata")
+#s3load("hybrid_rec_model.Rdata", bucket = "pred498finalmodel")
 
-parameter = ubcf_algorithms1$ubcf_cosine_25nn$param
+# Fit testing records.
+hybrid_predictions <- predict(hybrid_rec_model, 
+                             getData(train_scheme, "known"), 
+                             type = "topNList", 
+                             n = 20)
 
-recommender_algorithms$ubcf_cosine_50nn$name
-
-# Fit the top performing ubcf_cosine_50nn model as single train/test scheme. 
-ubcf_model <- getData(ubcf_best_scheme, "train") %>%
-  Recommender(method = "UBCF", parameter = list(method = "cosine", 
-                                                nn = 50,
-                                                normalize = "center"))
+hybrid_accuracy_by_user <- calcPredictionAccuracy(hybrid_predictions,
+                                                  getData(ubcf_best_scheme, "unknown"),
+                                                  given = 5,
+                                                  goodRating = 3,
+                                                  byUser = TRUE)
