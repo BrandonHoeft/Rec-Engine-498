@@ -170,72 +170,38 @@ recommenderRegistry$get_entries(dataType = "realRatingMatrix")
 
 set.seed(2017)
 train_scheme <- evaluationScheme(real_r_filtered_rows_cols,
-                                     method = "split", # random train/test scheme
-                                     train = 0.75,
-                                     k = 1,
-                                     given = 5,  # how many records for a test user will learn the model? 
-                                     goodRating = 3) # threshold for classification. Just above Median Total_rating_max10.
+                                 method = "split", # random train/test scheme
+                                 train = 0.75,
+                                 k = 1,
+                                 given = 5,  # how many records for a test user will learn the model? 
+                                 goodRating = 3) # threshold for classification. Just above Median Total_rating_max10.
 train_scheme
 
 
+# Build single best  UBCF recommender ------------------------------------------
+ubcf_model <- getData(train_scheme, "train") %>%
+  Recommender(method = "UBCF", parameter = list(method = "cosine", 
+                                                nn = 50,
+                                                normalize = "center"))
 
+ubcf_predictions <- predict(ubcf_model, 
+                            getData(train_scheme, "known"), 
+                            type = "topNList", 
+                            n = 20)
 
-# Build a Hybrid Recommender System of UBCF, IBCF, popular, re-recommended ------
+ubcf_accuracy_by_user <- calcPredictionAccuracy(ubcf_predictions,
+                                                getData(train_scheme, "unknown"),
+                                                given = 5,
+                                                goodRating = 3,
+                                                byUser = TRUE)
 
-hybrid_rec_model <- HybridRecommender(
-  Recommender(getData(train_scheme, "train"), 
-              method = "UBCF", 
-              parameter = list(method = "cosine", 
-                               nn = 50,
-                               normalize = "center")),
-  Recommender(getData(train_scheme, "train"), 
-              method = "IBCF",
-              parameter = list(method = "pearson", 
-                               k = 350,
-                               normalize = "center")),
-  Recommender(getData(train_scheme, "train"), method = "POPULAR"),
-  Recommender(getData(train_scheme, "train"), method = "RERECOMMEND"),
-  weights = c(.3, .3, .1, .3)
-)
-#s3save(hybrid_rec_model, bucket = "pred498finalmodel", object = "hybrid_rec_model.Rdata")
-#s3load("hybrid_rec_model.Rdata", bucket = "pred498finalmodel")
-
-# Fit testing records.
-hybrid_predictions <- predict(hybrid_rec_model, 
-                             getData(train_scheme, "known"), 
-                             type = "topNList", 
-                             n = 20)
-#s3save(hybrid_predictions, bucket = "pred498finalmodel", object = "hybrid_predictions.Rdata")
-#s3load("hybrid_predictions.Rdata", bucket = "pred498finalmodel")
-str(hybrid_predictions)
-hybrid_accuracy_by_user <- calcPredictionAccuracy(hybrid_predictions,
-                                                  getData(train_scheme, "unknown"),
-                                                  given = 5,
-                                                  goodRating = 3,
-                                                  byUser = TRUE)
-
-hybrid_accuracy_by_user <- as.data.frame(hybrid_accuracy_by_user) %>%
+ubcf_accuracy_by_user <- as.data.frame(ubcf_accuracy_by_user) %>%
   mutate(VisitorId = row.names(.)) %>%
   select(VisitorId, everything())
 
-summary(hybrid_accuracy_by_user$TP)
-
-calcPredictionAccuracy(hybrid_predictions,
+summary(ubcf_accuracy_by_user$TP)
+calcPredictionAccuracy(ubcf_predictions,
                        getData(train_scheme, "unknown"),
                        given = 5,
                        goodRating = 3,
                        byUser = FALSE)
-
-# Build a hybrid UBCF recommender with a implicit rating latent factor model ---------
-
-hybrid_rec_model <- HybridRecommender(
-  Recommender(getData(train_scheme, "train"), 
-              method = "UBCF", 
-              parameter = list(method = "cosine", 
-                               nn = 50,
-                               normalize = "center")),
-  Recommender(getData(train_scheme, "train"), 
-              method = "ALS_implicit",
-              parameter = NULL), # default parameters
-  weights = c(.5, .5)
-)
