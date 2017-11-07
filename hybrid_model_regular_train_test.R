@@ -377,6 +377,7 @@ top20_ratings_tidy <- hybrid2_test_recommendations %>%
   gather(key = rating_number, value = predicted_rating, -VisitorId) %>%
   mutate(rec_number = as.numeric(gsub("[^0-9]", "", rating_number)))
 
+# MOST IMPORTANT. THESE ARE OUR FINAL TOP 20 PREDICTIONS!!!!!!!
 test_recommendations <- top20_rec_tidy %>%
   inner_join(top20_ratings_tidy, by = c('VisitorId', 'rec_number')) %>%
   select(-rating_number) %>%
@@ -402,3 +403,57 @@ all.equal(user1_predicted_ratings,
           test_recommendations[test_recommendations$VisitorId == '706937327430', ]$predicted_rating)
 
 
+# Identify True positives vs. False Positives from predicted records -----------
+# Need to convert the unknown RealRatingMatrix into a dataframe (VisitorId, Parent, Rating)
+# https://stackoverflow.com/questions/15849641/how-to-convert-a-sparse-matrix-into-a-matrix-of-index-and-value-of-non-zero-elem
+temp <-as(getData(train_scheme, "unknown"), "matrix")
+temp <- as(temp, "sparseMatrix")
+sparseToVector <- function(x) {as.data.frame(summary(x))}
+
+unknown_test_data_df <- sparseToVector(temp) %>%
+  filter(!is.na(x)) # should have only 126,929 rows reflecting the 126,929 ratings in getData(train_scheme, "unknown")
+
+head(item_labels_df)
+visitor_labels_df <- data.frame(visitor_index =1:length(dimnames(getData(train_scheme, "unknown"))[[1]]),
+                                VisitorId = dimnames(getData(train_scheme, "unknown"))[[1]])
+head(visitor_labels_df)
+
+unknown_test_data_df <- unknown_test_data_df %>%
+  left_join(visitor_labels_df, by = c('i' = 'visitor_index')) %>%
+  left_join(item_labels_df, by = c('j' = 'parent_index')) %>%
+  rename(known_rating = x) %>%
+
+unknown_test_data_df$VisitorId <- sapply(unknown_test_data_df$VisitorId, as.character)
+unknown_test_data_df$parent_rec <- sapply(unknown_test_data_df$parent_rec, as.character)
+
+# MOST IMPORTANT. THESE ARE OUR FINAL TOP 20 PREDICTIONS with column for True Positive Identification!!!!!!!
+# left join the true positives from the unknown test data to our
+# predictions of top 20 recommendations for each visitor.
+
+# convert factor to character. Better for joining.
+test_recommendations$predicted_parent <- sapply(test_recommendations$predicted_parent, as.character)
+
+test_recommendations_final <- test_recommendations %>%
+  left_join(unknown_test_data_df, by = c('VisitorId' = 'VisitorId',
+                                         'predicted_parent' = 'parent_rec')) %>%
+  rename(true_positive_rating = known_rating) %>%
+  select(-i, -j)
+s3save(test_recommendations_final, bucket = "pred498finalmodel", object = "test_recommendations_final.Rdata")
+#s3load("test_recommendations_final.Rdata", bucket = "pred498finalmodel")
+
+# Confirm that the unknown_test_data_df is actually only returning the rows of the 
+# unknown records and not leaking any of the 5 records used to train new data. CONFIRMED. 
+rowCounts(real_r_filtered_rows_cols["706937327430",]) # 51 items rated for this user.
+unknown_test_data_df %>%
+  filter(VisitorId == '706937327430') # 46 row counts for this test record. 5 were used to train the model. These 46 were the unknown values available for predicting. 
+
+# 2nd Most important. Summary statistics for each test user on their TP count and Precision calculation. 
+# Calculate TP counts and Precision for each of the test users.
+test_recommendations_performance <- test_recommendations_final %>%
+  group_by(VisitorId) %>%
+  summarize(TP = sum(!is.na(true_positive_rating)),
+         test_precision = round(TP / n(), 2)) %>%
+  ungroup() %>%
+  arrange(desc(TP))
+s3save(test_recommendations_performance, bucket = "pred498finalmodel", object = "test_recommendations_performance.Rdata")
+#s3load("test_recommendations_performance.Rdata", bucket = "pred498finalmodel")
