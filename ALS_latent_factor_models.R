@@ -175,7 +175,7 @@ train_scheme <- evaluationScheme(real_r_filtered_rows_cols,
                                 given = 5,  # how many records for a test user will learn the model? 
                                 goodRating = 3) # threshold for classification. Just above Median Total_rating_max10.
 
-ubcf_algorithms_list <- list(
+latent_factor_algorithms <- list(
   "ALS1" = list(name = "ALS",
                 param = list(normalize = "center",
                              lambda = 0.1,
@@ -183,22 +183,22 @@ ubcf_algorithms_list <- list(
                              seed = 2017)),
   "ALS2" = list(name = "ALS",
                 param = list(normalize = "center",
-                             lambda = 0.1, # regularization parameter.
+                             lambda = 0.2, # regularization parameter.
                              n_factors = 250,
                              seed = 2017)),
   "ALS3" = list(name = "ALS",
                 param =  list(normalize = "center",
-                              lambda = 0.1,
+                              lambda = 0.3,
                               n_factors = 1000,
                               seed = 2017)),
   "ALS_implicit1" = list(name = "ALS_implicit",
                              param = list(lambda = 0.1,
-                                          alpha = 5, # How confident are we of implicit feedback
+                                          alpha = 8, # How confident are we of implicit feedback
                                           n_factors = 100,
                                           min_item_nr = 3,
                                           seed = 2017)),
   "ALS_implicit2" = list(name = "ALS_implicit",
-                         param = list(lambda = 0.1,
+                         param = list(lambda = 0.2,
                                       alpha = 5, # How confident are we of implicit feedback
                                       n_factors = 250,
                                       min_item_nr = 1,
@@ -210,3 +210,18 @@ ubcf_algorithms_list <- list(
                                       min_item_nr = 1,
                                       seed = 2017))
 )
+
+latent_factor_results <- evaluate(train_scheme,
+                                  latent_factor_algorithms,
+                                  type = "topNList",
+                                  n = c(5, 10, 20, 50))
+
+s3save(latent_factor_results, bucket = "pred498team5", object = "latent_factor_results_11717.Rdata")
+#s3load("latent_factor_results_11717.Rdata", bucket = "pred498team5")
+class(latent_factor_results)
+latent_factor_results
+avg(latent_factor_results)
+plot(latent_factor_results, annotate=TRUE)
+plot(latent_factor_results, "prec/rec", annotate=TRUE)
+
+ubcf_results
