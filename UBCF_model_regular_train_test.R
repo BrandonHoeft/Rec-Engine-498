@@ -199,6 +199,18 @@ ubcf_accuracy_by_user <- as.data.frame(ubcf_accuracy_by_user) %>%
   mutate(VisitorId = row.names(.)) %>%
   select(VisitorId, everything())
 
+fn <- sum(ubcf_accuracy_by_user$FN)
+tn <- sum(ubcf_accuracy_by_user$TN)
+tp <- sum(ubcf_accuracy_by_user$TP)
+fp <- sum(ubcf_accuracy_by_user$FP)
+
+
+#         TP * TN - FP * FN
+# MCC = -----------------------------------------------------
+#        [(TP + FP) * (FN + TN) * (FP + TN) * (TP + FN)]^(1/2)
+
+mcc <- (tp * tn - fp * fn) / sqrt((tp + fp) * (fn + tn) * (fp + tn) * (tp + fn))
+
 summary(ubcf_accuracy_by_user$TP)
 calcPredictionAccuracy(ubcf_predictions,
                        getData(train_scheme, "unknown"),
