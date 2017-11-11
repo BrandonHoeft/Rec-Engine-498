@@ -252,6 +252,8 @@ latent_factor_predictions <- predict(latent_factor_model,
                             getData(train_scheme, "known"), 
                             type = "topNList", 
                             n = 20)
+s3save(latent_factor_predictions, bucket = "pred498finalmodel", object = "latent_factor_predict_object.Rdata")
+#s3load("latent_factor_predict_object.Rdata", bucket = "pred498finalmodel")
 
 latent_factor_accuracy_by_user <- calcPredictionAccuracy(latent_factor_predictions,
                                                 getData(train_scheme, "unknown"),
