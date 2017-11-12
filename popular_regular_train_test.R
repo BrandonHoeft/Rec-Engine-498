@@ -179,7 +179,8 @@ train_scheme
 
 
 # Build single best  UBCF recommender ------------------------------------------
-popular_model <- Recommender(getData(train_scheme, "train"), method = "POPULAR")
+popular_model <- Recommender(getData(train_scheme, "train"), method = "POPULAR",
+                             parameter = list(normalize = "center"))
 
 popular_predictions <- predict(popular_model, 
                             getData(train_scheme, "known"), 
@@ -192,14 +193,14 @@ popular_accuracy_by_user <- calcPredictionAccuracy(popular_predictions,
                                                 goodRating = 3,
                                                 byUser = TRUE)
 
-popular_accuracy_by_user <- as.data.frame(ibcf_accuracy_by_user) %>%
+popular_accuracy_by_user <- as.data.frame(popular_accuracy_by_user) %>%
   mutate(VisitorId = row.names(.)) %>%
   select(VisitorId, everything())
 
-fn <- sum(ibcf_accuracy_by_user$FN)
-tn <- sum(ibcf_accuracy_by_user$TN)
-tp <- sum(ibcf_accuracy_by_user$TP)
-fp <- sum(ibcf_accuracy_by_user$FP)
+fn <- sum(popular_accuracy_by_user$FN)
+tn <- sum(popular_accuracy_by_user$TN)
+tp <- sum(popular_accuracy_by_user$TP)
+fp <- sum(popular_accuracy_by_user$FP)
 
 
 #         TP * TN - FP * FN
@@ -208,9 +209,204 @@ fp <- sum(ibcf_accuracy_by_user$FP)
 
 mcc <- (tp * tn - fp * fn) / sqrt((tp + fp) * (fn + tn) * (fp + tn) * (tp + fn))
 
-summary(ibcf_accuracy_by_user$TP)
-calcPredictionAccuracy(popular_accuracy_by_user,
+summary(popular_accuracy_by_user$TP)
+calcPredictionAccuracy(popular_predictions,
                        getData(train_scheme, "unknown"),
                        given = 5,
                        goodRating = 3,
                        byUser = FALSE)
+
+
+
+# Obtain Top N predictions vs. actual purchases last 2-months ------------------
+popular_test_recommendations <- data.frame(VisitorId = character(length = nrow(getData(train_scheme, "unknown"))),
+                                        rec1 = integer(length = nrow(getData(train_scheme, "unknown"))),
+                                        rec2 = integer(length = nrow(getData(train_scheme, "unknown"))), 
+                                        rec3 = integer(length = nrow(getData(train_scheme, "unknown"))), 
+                                        rec4 = integer(length = nrow(getData(train_scheme, "unknown"))), 
+                                        rec5 = integer(length = nrow(getData(train_scheme, "unknown"))), 
+                                        rec6 = integer(length = nrow(getData(train_scheme, "unknown"))), 
+                                        rec7 = integer(length = nrow(getData(train_scheme, "unknown"))), 
+                                        rec8 = integer(length = nrow(getData(train_scheme, "unknown"))), 
+                                        rec9 = integer(length = nrow(getData(train_scheme, "unknown"))), 
+                                        rec10 = integer(length = nrow(getData(train_scheme, "unknown"))), 
+                                        rec11 = integer(length = nrow(getData(train_scheme, "unknown"))), 
+                                        rec12 = integer(length = nrow(getData(train_scheme, "unknown"))),
+                                        rec13 = integer(length = nrow(getData(train_scheme, "unknown"))),
+                                        rec14 = integer(length = nrow(getData(train_scheme, "unknown"))),
+                                        rec15 = integer(length = nrow(getData(train_scheme, "unknown"))),
+                                        rec16 = integer(length = nrow(getData(train_scheme, "unknown"))),
+                                        rec17 = integer(length = nrow(getData(train_scheme, "unknown"))),
+                                        rec18 = integer(length = nrow(getData(train_scheme, "unknown"))),
+                                        rec19 = integer(length = nrow(getData(train_scheme, "unknown"))),
+                                        rec20 = integer(length = nrow(getData(train_scheme, "unknown"))),
+                                        rating1 = integer(length = nrow(getData(train_scheme, "unknown"))),
+                                        rating2 = integer(length = nrow(getData(train_scheme, "unknown"))), 
+                                        rating3 = integer(length = nrow(getData(train_scheme, "unknown"))), 
+                                        rating4 = integer(length = nrow(getData(train_scheme, "unknown"))), 
+                                        rating5 = integer(length = nrow(getData(train_scheme, "unknown"))), 
+                                        rating6 = integer(length = nrow(getData(train_scheme, "unknown"))), 
+                                        rating7 = integer(length = nrow(getData(train_scheme, "unknown"))), 
+                                        rating8 = integer(length = nrow(getData(train_scheme, "unknown"))), 
+                                        rating9 = integer(length = nrow(getData(train_scheme, "unknown"))), 
+                                        rating10 = integer(length = nrow(getData(train_scheme, "unknown"))), 
+                                        rating11 = integer(length = nrow(getData(train_scheme, "unknown"))), 
+                                        rating12 = integer(length = nrow(getData(train_scheme, "unknown"))),
+                                        rating13 = integer(length = nrow(getData(train_scheme, "unknown"))),
+                                        rating14 = integer(length = nrow(getData(train_scheme, "unknown"))),
+                                        rating15 = integer(length = nrow(getData(train_scheme, "unknown"))),
+                                        rating16 = integer(length = nrow(getData(train_scheme, "unknown"))),
+                                        rating17 = integer(length = nrow(getData(train_scheme, "unknown"))),
+                                        rating18 = integer(length = nrow(getData(train_scheme, "unknown"))),
+                                        rating19 = integer(length = nrow(getData(train_scheme, "unknown"))),
+                                        rating20 = integer(length = nrow(getData(train_scheme, "unknown"))),
+                                        stringsAsFactors=FALSE) 
+
+for(i in 1:nrow(getData(train_scheme, "unknown"))) {
+  popular_test_recommendations$VisitorId[i] <- dimnames(getData(train_scheme, "unknown"))[[1]][i]
+  popular_test_recommendations$rec1[i]  <- popular_predictions@items[[i]][1]
+  popular_test_recommendations$rec2[i]  <- popular_predictions@items[[i]][2]
+  popular_test_recommendations$rec3[i]  <- popular_predictions@items[[i]][3]
+  popular_test_recommendations$rec4[i]  <- popular_predictions@items[[i]][4]
+  popular_test_recommendations$rec5[i]  <- popular_predictions@items[[i]][5]
+  popular_test_recommendations$rec6[i]  <- popular_predictions@items[[i]][6]
+  popular_test_recommendations$rec7[i]  <- popular_predictions@items[[i]][7]
+  popular_test_recommendations$rec8[i]  <- popular_predictions@items[[i]][8]
+  popular_test_recommendations$rec9[i]  <- popular_predictions@items[[i]][9]
+  popular_test_recommendations$rec10[i] <- popular_predictions@items[[i]][10]
+  popular_test_recommendations$rec11[i] <- popular_predictions@items[[i]][11]
+  popular_test_recommendations$rec12[i] <- popular_predictions@items[[i]][12]
+  popular_test_recommendations$rec13[i] <- popular_predictions@items[[i]][13]
+  popular_test_recommendations$rec14[i] <- popular_predictions@items[[i]][14]
+  popular_test_recommendations$rec15[i] <- popular_predictions@items[[i]][15]
+  popular_test_recommendations$rec16[i] <- popular_predictions@items[[i]][16]
+  popular_test_recommendations$rec17[i] <- popular_predictions@items[[i]][17]
+  popular_test_recommendations$rec18[i] <- popular_predictions@items[[i]][18]
+  popular_test_recommendations$rec19[i] <- popular_predictions@items[[i]][19]
+  popular_test_recommendations$rec20[i] <- popular_predictions@items[[i]][20]
+  popular_test_recommendations$rating1[i] <- popular_predictions@ratings[[i]][1]
+  popular_test_recommendations$rating2[i] <- popular_predictions@ratings[[i]][2]
+  popular_test_recommendations$rating3[i] <- popular_predictions@ratings[[i]][3]
+  popular_test_recommendations$rating4[i] <- popular_predictions@ratings[[i]][4]
+  popular_test_recommendations$rating5[i] <- popular_predictions@ratings[[i]][5]
+  popular_test_recommendations$rating6[i] <- popular_predictions@ratings[[i]][6]
+  popular_test_recommendations$rating7[i] <- popular_predictions@ratings[[i]][7]
+  popular_test_recommendations$rating8[i] <- popular_predictions@ratings[[i]][8]
+  popular_test_recommendations$rating9[i] <- popular_predictions@ratings[[i]][9]
+  popular_test_recommendations$rating10[i] <- popular_predictions@ratings[[i]][10]
+  popular_test_recommendations$rating11[i] <- popular_predictions@ratings[[i]][11]
+  popular_test_recommendations$rating12[i] <- popular_predictions@ratings[[i]][12]
+  popular_test_recommendations$rating13[i] <- popular_predictions@ratings[[i]][13]
+  popular_test_recommendations$rating14[i] <- popular_predictions@ratings[[i]][14]
+  popular_test_recommendations$rating15[i] <- popular_predictions@ratings[[i]][15]
+  popular_test_recommendations$rating16[i] <- popular_predictions@ratings[[i]][16]
+  popular_test_recommendations$rating17[i] <- popular_predictions@ratings[[i]][17]
+  popular_test_recommendations$rating18[i] <- popular_predictions@ratings[[i]][18]
+  popular_test_recommendations$rating19[i] <- popular_predictions@ratings[[i]][19]
+  popular_test_recommendations$rating20[i] <- popular_predictions@ratings[[i]][20]
+}
+
+# extract the item names from hybrid2_predictions object. Need to replace the 
+# predicted item indices with there obfuscation item label (line 371)
+item_labels <- as.character(popular_predictions@itemLabels)
+item_labels_df <- data.frame(parent_index = 1:length(item_labels),
+                             parent_rec = item_labels)
+
+# convert top 20 rec's data from wide format to long format.
+top20_rec_tidy <- popular_test_recommendations %>% 
+  select(-starts_with("rating")) %>% # drop predicted ratings columns
+  gather(key = rec_number, value = parent_index, -VisitorId) %>%
+  # strip text and keep the number.
+  mutate(rec_number = as.numeric(gsub("[^0-9]", "", rec_number))) %>%
+  # replace parent index with the actual item lable.
+  left_join(item_labels_df, by = 'parent_index') %>%
+  select(-parent_index)
+
+top20_ratings_tidy <- popular_test_recommendations %>% 
+  select(-starts_with("rec")) %>% # drop predicted records columns.
+  gather(key = rating_number, value = predicted_rating, -VisitorId) %>%
+  mutate(rec_number = as.numeric(gsub("[^0-9]", "", rating_number)))
+
+# MOST IMPORTANT. THESE ARE OUR FINAL TOP 20 PREDICTIONS!!!!!!!
+test_recommendations <- top20_rec_tidy %>%
+  inner_join(top20_ratings_tidy, by = c('VisitorId', 'rec_number')) %>%
+  select(-rating_number) %>%
+  rename(predicted_parent = parent_rec) %>%
+  arrange(VisitorId, rec_number)
+
+
+# CHECK: do values from the hybrid2_predictions S4 object for user1 match the parent
+# labels for the first user in the test_recommendations dataset.
+dimnames(getData(train_scheme, "unknown"))[[1]][1] # user "706937327430"
+user1_predicted_items <- popular_predictions@items[[1]]
+user1_predicted_items <- popular_predictions@itemLabels[user1_predicted_items]
+user1_predicted_items
+user1_predicted_ratings <- popular_predictions@ratings[[1]]
+user1_predicted_ratings
+
+# data frame extraction predicted items match!
+all.equal(user1_predicted_items, 
+          as.character(test_recommendations[test_recommendations$VisitorId == '706937327430', ]$predicted_parent))
+
+# data frame extraction predicted ratings match!
+all.equal(user1_predicted_ratings, 
+          test_recommendations[test_recommendations$VisitorId == '706937327430', ]$predicted_rating)
+
+
+# Identify True positives vs. False Positives from predicted records -----------
+# Need to convert the unknown RealRatingMatrix into a dataframe (VisitorId, Parent, Rating)
+# https://stackoverflow.com/questions/15849641/how-to-convert-a-sparse-matrix-into-a-matrix-of-index-and-value-of-non-zero-elem
+temp <-as(getData(train_scheme, "unknown"), "matrix")
+temp <- as(temp, "sparseMatrix")
+sparseToVector <- function(x) {as.data.frame(summary(x))}
+
+unknown_test_data_df <- sparseToVector(temp) %>%
+  filter(!is.na(x)) # should have only 126,929 rows reflecting the 126,929 ratings in getData(train_scheme, "unknown")
+
+head(item_labels_df)
+visitor_labels_df <- data.frame(visitor_index =1:length(dimnames(getData(train_scheme, "unknown"))[[1]]),
+                                VisitorId = dimnames(getData(train_scheme, "unknown"))[[1]])
+head(visitor_labels_df)
+
+unknown_test_data_df <- unknown_test_data_df %>%
+  left_join(visitor_labels_df, by = c('i' = 'visitor_index')) %>%
+  left_join(item_labels_df, by = c('j' = 'parent_index')) %>%
+  rename(known_rating = x) 
+
+unknown_test_data_df$VisitorId <- sapply(unknown_test_data_df$VisitorId, as.character)
+unknown_test_data_df$parent_rec <- sapply(unknown_test_data_df$parent_rec, as.character)
+
+# MOST IMPORTANT. THESE ARE OUR FINAL TOP 20 PREDICTIONS with column for True Positive Identification!!!!!!!
+# left join the true positives from the unknown test data to our
+# predictions of top 20 recommendations for each visitor.
+
+# convert factor to character. Better for joining.
+test_recommendations$predicted_parent <- sapply(test_recommendations$predicted_parent, as.character)
+
+test_recommendations_final <- test_recommendations %>%
+  left_join(unknown_test_data_df, by = c('VisitorId' = 'VisitorId',
+                                         'predicted_parent' = 'parent_rec')) %>%
+  rename(true_positive_rating = known_rating) %>%
+  select(-i, -j)
+s3save(test_recommendations_final, bucket = "pred498finalmodel", object = "popular_test_recommendations_final.Rdata")
+#s3load("popular_test_recommendations_final.Rdata", bucket = "pred498finalmodel")
+
+# Confirm that the unknown_test_data_df is actually only returning the rows of the 
+# unknown records and not leaking any of the 5 records used to train new data. CONFIRMED. 
+rowCounts(real_r_filtered_rows_cols["706937327430",]) # 51 items rated for this user.
+unknown_test_data_df %>%
+  filter(VisitorId == '706937327430') # 46 row counts for this test record. 5 were used to train the model. These 46 were the unknown values available for predicting. 
+
+# 2nd Most important. Summary statistics for each test user on their TP count and Precision calculation. 
+# Calculate TP counts and Precision for each of the test users.
+test_recommendations_performance <- test_recommendations_final %>%
+  group_by(VisitorId) %>%
+  summarize(TP = sum(!is.na(true_positive_rating)),
+            test_precision = round(TP / n(), 2)) %>%
+  ungroup() %>%
+  arrange(desc(TP))
+s3save(test_recommendations_performance, bucket = "pred498finalmodel", object = "popular_test_recommendations_performance.Rdata")
+#s3load("popular_test_recommendations_performance.Rdata", bucket = "pred498finalmodel")
+
+summary(test_recommendations_performance$test_precision)
+summary(test_recommendations_performance$TP)
