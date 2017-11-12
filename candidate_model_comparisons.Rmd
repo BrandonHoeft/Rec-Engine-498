@@ -4,9 +4,9 @@ author: "Brandon Hoeft"
 date: "October 26, 2017"
 output:
   md_document:
-  variant: markdown_github
-  toc: TRUE
-  toc_depth: 4
+    variant: markdown_github
+    toc: TRUE
+    toc_depth: 3
 ---
 
 ```{r setup, include = FALSE}
@@ -147,8 +147,8 @@ models %>%
     ggplot(aes(x = test_precision, y = model_version, fill = model_version)) + 
         geom_density_ridges_gradient(scale = 3, rel_min_height = .001) +
         guides(fill = "none") +
-        labs(title = "Precision of Recommendations on Test Users",
-             subtitle = "Based on Top 20 predictions",
+        labs(title = "Precision of Model Predictions on Test Users",
+             subtitle = "Based on Top 20 Recommendations",
              x = "Model Precision",
              y = "Model Type")
 ```
@@ -161,9 +161,9 @@ models %>%
     ggplot(aes(x = TP, y = model_version, fill = model_version)) + 
         geom_density_ridges_gradient(scale = 3, rel_min_height = .001) +
         guides(fill = "none") +
-        labs(title = "True Positive Recommendations on Test Users",
-             subtitle = "Based on Top 20 predictions",
-             x = "Model True Positives",
+        labs(title = "True Positive Predictions on Test Users",
+             subtitle = "Based on Top 20 Recommendations",
+             x = "True Positives",
              y = "Model Type")
 ```
 
@@ -176,8 +176,8 @@ models %>%
         geom_boxplot(outlier.colour = "red", outlier.shape = 1, outlier.alpha = .2, outlier.size = .7) +
         coord_flip() +
         guides(fill = "none") +
-        labs(title = "Precision of Recommendations on Test Users",
-             subtitle = "Based on Top 20 predictions",
+        labs(title = "Precision of Model Predictions on Test Users",
+             subtitle = "Based on Top 20 Recommendations",
              x = "Model Type",
              y = "Model Precision")
 ```
@@ -191,8 +191,8 @@ models %>%
         geom_boxplot(outlier.colour = "red", outlier.shape = 1, outlier.alpha = .2, outlier.size = .7) +
         coord_flip() +
         guides(fill = "none") +
-        labs(title = "True Positive Recommendations on Test Users",
-             subtitle = "Based on Top 20 Rec's",
+        labs(title = "True Positive Predictions on Test Users",
+             subtitle = "Based on Top 20 Recommendations",
              x = "Model Type",
-             y = "True Positive")
+             y = "True Positives")
 ```
