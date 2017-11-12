@@ -178,13 +178,13 @@ train_scheme <- evaluationScheme(real_r_filtered_rows_cols,
 train_scheme
 
 
-# Build single best  UBCF recommender ------------------------------------------
+# Build single best  IBCF recommender ------------------------------------------
 ibcf_model <- getData(train_scheme, "train") %>%
-  Recommender(method = "IBCF", parameter = list(method = "pearson", 
-                                                k = 100,
+  Recommender(method = "IBCF", parameter = list(k = 100,
+                                                method = "Cosine",
                                                 normalize = "center"))
-s3save(ibcf_model, bucket = "pred498finalmodel", object = "ibcf_model.Rdata")
-#s3load("ibcf_model.Rdata", bucket = "pred498finalmodel")
+#s3save(ibcf_model, bucket = "pred498finalmodel", object = "ibcf_model.Rdata")
+s3load("ibcf_model.Rdata", bucket = "pred498finalmodel")
 
 ibcf_predictions <- predict(ibcf_model, 
                             getData(train_scheme, "known"), 
@@ -308,7 +308,7 @@ for(i in 1:nrow(getData(train_scheme, "unknown"))) {
   ibcf_test_recommendations$rating20[i] <- ibcf_predictions@ratings[[i]][20]
 }
 
-# extract the item names from hybrid2_predictions object. Need to replace the 
+# extract the item names from ibcf predictions object. Need to replace the 
 # predicted item indices with there obfuscation item label (line 371)
 item_labels <- as.character(ibcf_predictions@itemLabels)
 item_labels_df <- data.frame(parent_index = 1:length(item_labels),
@@ -337,7 +337,7 @@ test_recommendations <- top20_rec_tidy %>%
   arrange(VisitorId, rec_number)
 
 
-# CHECK: do values from the hybrid2_predictions S4 object for user1 match the parent
+# CHECK: do values from the ibcf predictions S4 object for user1 match the parent
 # labels for the first user in the test_recommendations dataset.
 dimnames(getData(train_scheme, "unknown"))[[1]][1] # user "706937327430"
 user1_predicted_items <- ibcf_predictions@items[[1]]
@@ -401,14 +401,14 @@ unknown_test_data_df %>%
 
 # 2nd Most important. Summary statistics for each test user on their TP count and Precision calculation. 
 # Calculate TP counts and Precision for each of the test users.
-test_recommendations_performance <- test_recommendations_final %>%
+ibcf_test_recommendations_performance <- test_recommendations_final %>%
   group_by(VisitorId) %>%
   summarize(TP = sum(!is.na(true_positive_rating)),
             test_precision = round(TP / n(), 2)) %>%
   ungroup() %>%
   arrange(desc(TP))
-s3save(test_recommendations_performance, bucket = "pred498finalmodel", object = "ibcf_test_recommendations_performance.Rdata")
-#s3load("ubcf_test_recommendations_performance.Rdata", bucket = "pred498finalmodel")
+s3save(ibcf_test_recommendations_performance, bucket = "pred498finalmodel", object = "ibcf_test_recommendations_performance.Rdata")
+#s3load("ibcf_test_recommendations_performance.Rdata", bucket = "pred498finalmodel")
 
 summary(test_recommendations_performance$test_precision)
 summary(test_recommendations_performance$TP)
