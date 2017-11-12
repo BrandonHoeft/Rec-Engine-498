@@ -107,22 +107,23 @@ hybrid_norm3 <- hybrid_norm2 %>%
   slice(1:20) %>%
   ungroup()
 
-#s3load("unknown_test_data_df.Rdata", bucket = "pred498finalmodel")
+s3load("unknown_test_data_df.Rdata", bucket = "pred498finalmodel")
+
 ubcf_popular_hybrid_test_recommendations_final <- hybrid_norm3 %>%
   left_join(unknown_test_data_df, by = c('VisitorId' = 'VisitorId',
                                          'predicted_parent' = 'parent_rec')) %>%
   select(-i, -j, -known_rating)
-s3save(ubcf_popular_hybrid_test_recommendations_final, bucket = "pred498finalmodel", object = "ubcf_popular_hybrid_test_recommendations_final.Rdata")
+#s3save(ubcf_popular_hybrid_test_recommendations_final, bucket = "pred498finalmodel", object = "ubcf_popular_hybrid_test_recommendations_final.Rdata")
 #s3load("ubcf_popular_hybrid_test_recommendations_final.Rdata", bucket = "pred498finalmodel")
 
-ubcf_popular_hybrid_test_recommendations_performance <- hybrid_test_recommendations_final %>%
+ubcf_popular_hybrid_test_recommendations_performance <- ubcf_popular_hybrid_test_recommendations_final %>%
   group_by(VisitorId) %>%
   summarize(TP = sum(!is.na(true_positive_rating)),
             test_precision = round(TP / n(), 2)) %>%
   ungroup() %>%
   arrange(desc(TP))
-s3save(ubcf_popular_hybrid_test_recommendations_performance, bucket = "pred498finalmodel", object = "ubcf_popular_hybrid_test_recommendations_final.Rdata")
-#s3load("ubcf_popular_hybrid_test_recommendations_final.Rdata", bucket = "pred498finalmodel")
+#s3save(ubcf_popular_hybrid_test_recommendations_performance, bucket = "pred498finalmodel", object = "ubcf_popular_hybrid_test_recommendations_performance.Rdata")
+#s3load("ubcf_popular_hybrid_test_recommendations_performance.Rdata", bucket = "pred498finalmodel")
 
 summary(ubcf_popular_hybrid_test_recommendations_performance$TP)
 summary(ubcf_popular_hybrid_test_recommendations_performance$test_precision)
