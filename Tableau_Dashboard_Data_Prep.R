@@ -13,6 +13,25 @@ library(pryr) # mem_used() and object_size() functions to manage/understand memo
 
 # Get the test user performance data from A top Candidate Model (UBCF-Popular Hybrid)----
 s3load("ubcf_popular_hybrid_test_recommendations_performance.Rdata", bucket = "pred498finalmodel")
+model1 <- ubcf_popular_hybrid_test_recommendations_performance %>%
+  mutate(model_version = 'ubcf_popular_hybrid_model')
+remove(ubcf_popular_hybrid_test_recommendations_performance)
+
+s3load("test_recommendations_performance.Rdata", bucket = "pred498finalmodel")
+model2 <- test_recommendations_performance %>%
+  mutate(model_version = 'ubcf_latent_factor_hybrid_model')
+remove(test_recommendations_performance)
+
+s3load("popular_test_recommendations_performance.Rdata", bucket = "pred498finalmodel")
+model3 <- test_recommendations_performance %>%
+  mutate(model_version = 'popular_model') 
+remove(test_recommendations_performance)
+
+s3load("ubcf_test_recommendations_performance.Rdata", bucket = "pred498finalmodel")
+model4 <- test_recommendations_performance %>%
+  mutate(model_version = 'ubcf_model') 
+remove(test_recommendations_performance)
+
 
 # Get the 7-months of web activity for all users. ------------------------------
 
@@ -106,8 +125,35 @@ test_user_data4 <- test_user_activity %>%
             SD_days_between_session = as.numeric(sd(days_difference, na.rm = TRUE)))
 
 
-test_user_summary <- inner_join(test_user_data1, test_user_data2, by = 'VisitorId') %>%
+
+# Combine the click data summaries with the test usre model prediction summaries ---------
+
+test_user_summary_model1 <- inner_join(test_user_data1, test_user_data2, by = 'VisitorId') %>%
   inner_join(test_user_data3, by = 'VisitorId') %>%
   inner_join(test_user_data4, by = 'VisitorId') %>%
-  inner_join(ubcf_popular_hybrid_test_recommendations_performance, by = 'VisitorId')
+  inner_join(model1, by = 'VisitorId')
+
+test_user_summary_model2 <- inner_join(test_user_data1, test_user_data2, by = 'VisitorId') %>%
+  inner_join(test_user_data3, by = 'VisitorId') %>%
+  inner_join(test_user_data4, by = 'VisitorId') %>%
+  inner_join(model2, by = 'VisitorId')
+
+test_user_summary_model3 <- inner_join(test_user_data1, test_user_data2, by = 'VisitorId') %>%
+  inner_join(test_user_data3, by = 'VisitorId') %>%
+  inner_join(test_user_data4, by = 'VisitorId') %>%
+  inner_join(model3, by = 'VisitorId')
+
+test_user_summary_model4 <- inner_join(test_user_data1, test_user_data2, by = 'VisitorId') %>%
+  inner_join(test_user_data3, by = 'VisitorId') %>%
+  inner_join(test_user_data4, by = 'VisitorId') %>%
+  inner_join(model4, by = 'VisitorId')
+
+
+test_user_data_tableau <- bind_rows(test_user_summary_model1,
+                                    test_user_summary_model2,
+                                    test_user_summary_model3,
+                                    test_user_summary_model4) 
+
+s3save(test_user_data_tableau, bucket = "pred498finalmodel", object = "test_user_data_tableau.Rdata")
+#s3load("test_user_data_tableau.Rdata", bucket = "pred498finalmodel")
 
