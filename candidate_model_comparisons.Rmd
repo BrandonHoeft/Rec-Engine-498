@@ -1,0 +1,198 @@
+---
+title: "EDA and Collaborative Filtering"
+author: "Brandon Hoeft"
+date: "October 26, 2017"
+output:
+  md_document:
+    variant: markdown_github
+    toc: TRUE
+    toc_depth: 3
+---
+
+```{r setup, include = FALSE}
+# my global options defined for each code chunk.
+knitr::opts_chunk$set(fig.width=8, fig.height=6, echo=FALSE, warning=FALSE, message=FALSE, comment = '')
+```
+
+``` {r}
+library(aws.s3) 
+library(ggplot2)
+library(ggridges)
+library(dplyr) # data wrangling
+library(tidyr) # data wrangling
+library(ggplot2) # data viz. 
+library(pryr) # mem_used() and object_size() functions to manage/understand memory usage.
+library(knitr)
+
+# specify keys as environment variables so I can read my s3 object(s) from AWS.
+# Your unique access key/secret needs to be passed before running the queries below. 
+#Sys.setenv("AWS_ACCESS_KEY_ID" = "",
+#           "AWS_SECRET_ACCESS_KEY" = "")
+
+```
+
+``` {r echo = FALSE}
+
+# perforamnce numbers for each test user from the hybrid ubcf and popular recommender model. 
+s3load("ubcf_popular_hybrid_test_recommendations_performance.Rdata", bucket = "pred498finalmodel")
+model1 <- ubcf_popular_hybrid_test_recommendations_performance %>%
+    mutate(model_version = 'ubcf_popular_hybrid')
+remove(ubcf_popular_hybrid_test_recommendations_performance)
+
+# latent factor model performance numbers for test users. 
+s3load("latent_factor_test_recommendations_performance.Rdata", bucket = "pred498finalmodel")
+model2 <- test_recommendations_performance %>%
+    mutate(model_version = 'latent_factor')
+remove(test_recommendations_performance)
+
+# hybrid2 model (UBCF and latent factor) performance numbers for test users.
+s3load("test_recommendations_performance.Rdata", bucket = "pred498finalmodel")
+model3 <- test_recommendations_performance %>%
+    mutate(model_version = 'hybrid_model')
+remove(test_recommendations_performance)
+
+# UBCF cosine 50nearest neighbors performance numbers for test users.
+s3load("ubcf_test_recommendations_performance.Rdata", bucket = "pred498finalmodel")
+model4 <- test_recommendations_performance %>%
+    mutate(model_version = 'ubcf') 
+remove(test_recommendations_performance)
+
+# IBCF Pearson 100 closest items performance numbers for test users.
+s3load("ibcf_test_recommendations_performance.Rdata", bucket = "pred498finalmodel")
+model5 <- ibcf_test_recommendations_performance %>%
+    mutate(model_version = 'ibcf') 
+remove(ibcf_test_recommendations_performance)
+
+# Popular Items Recommender
+s3load("popular_test_recommendations_performance.Rdata", bucket = "pred498finalmodel")
+model6 <- test_recommendations_performance %>%
+    mutate(model_version = 'popular') 
+remove(test_recommendations_performance)
+
+# Random Items Recommender
+s3load("random_test_recommendations_performance.Rdata", bucket = "pred498finalmodel")
+model7 <- random_accuracy_performance %>%
+    mutate(model_version = 'random') 
+remove(random_accuracy_performance)
+
+models <- bind_rows(model1, model2, model3, model4, model5, model6, model7)
+
+models$model_version <- factor(models$model_version, 
+                               levels = c('hybrid_model', 
+                                          'ubcf_popular_hybrid',
+                                          'popular',
+                                          'ubcf',
+                                          'latent_factor',
+                                          'ibcf',
+                                          'random'),
+                               labels = c('UBCF & Latent Factor Hybrid',
+                                          'UBCF & Popular Hybrid',
+                                          'Popular',
+                                          'UBCF',
+                                          'Latent Factor',
+                                          'IBCF',
+                                          'Random'))
+```
+
+
+## Introduction
+
+This document provides model comparison on the test user data for each of the different final types of recommender systems. Evaluations are made primarily by using precision, since we have constrained the problem to a Top 20 recommendations system. 
+
+Precision here tells us, of the top 20 recommendations predicted by the model for for each test user (unseen cases by the trained models), how many of these were actual parent items that the user did in fact rate? Higher values indicate that the model does a good job of making relevant item suggestions to users.
+
+## Summary Stats per Model
+
+Distributions of the precision metric on test users for each model type candidate. 
+
+``` {r }
+
+models %>%
+    group_by(model_version) %>%
+    summarize(minimum = round(min(test_precision), 2),
+              first_quartile = round(quantile(test_precision, .25), 2),
+              median = round(median(test_precision), 2),
+              mean = round(mean(test_precision), 2),
+              third_quartile = round(quantile(test_precision, .75), 2),
+              max = round(max(test_precision), 2)) %>%
+    arrange(desc(median), desc(mean), desc(first_quartile)) %>%
+    kable()
+
+```
+
+Distributions of the True Positive Count for test users for each model type candidate. Note, that this information correlates directly to the precision rate above. It just presents a different number to compare. 
+
+``` {r }
+
+models %>%
+    group_by(model_version) %>%
+    summarize(minimum = round(min(TP), 2),
+              first_quartile = round(quantile(TP, .25), 2),
+              median = round(median(TP), 2),
+              mean = round(mean(TP), 2),
+              third_quartile = round(quantile(TP, .75), 2),
+              max = round(max(TP), 2)) %>%
+    arrange(desc(median), desc(first_quartile)) %>%
+    kable()
+
+```
+
+## Visual Comparison of Model Precision of Recommendations
+
+Overlapping density plots for each model's precision of recommendations for the same test users. 
+
+``` {r }
+
+models %>%
+    ggplot(aes(x = test_precision, y = model_version, fill = model_version)) + 
+        geom_density_ridges_gradient(scale = 3, rel_min_height = .001) +
+        guides(fill = "none") +
+        labs(title = "Precision of Model Predictions on Test Users",
+             subtitle = "Based on Top 20 Recommendations",
+             x = "Model Precision",
+             y = "Model Type")
+```
+
+Overlapping density plots for each model's True Positive Recommendations count for the same test users. 
+
+``` {r }
+
+models %>%
+    ggplot(aes(x = TP, y = model_version, fill = model_version)) + 
+        geom_density_ridges_gradient(scale = 3, rel_min_height = .001) +
+        guides(fill = "none") +
+        labs(title = "True Positive Predictions on Test Users",
+             subtitle = "Based on Top 20 Recommendations",
+             x = "True Positives",
+             y = "Model Type")
+```
+
+Panel Box Plots of Top 20 Recommendations precision metric for the same test users. 
+
+``` {r }
+
+models %>%
+    ggplot(aes(x = model_version, y = test_precision)) + 
+        geom_boxplot(outlier.colour = "red", outlier.shape = 1, outlier.alpha = .2, outlier.size = .7) +
+        coord_flip() +
+        guides(fill = "none") +
+        labs(title = "Precision of Model Predictions on Test Users",
+             subtitle = "Based on Top 20 Recommendations",
+             x = "Model Type",
+             y = "Model Precision")
+```
+
+Panel Box Plots of True Positive Recommendations count for the same test users. 
+
+``` {r }
+
+models %>%
+    ggplot(aes(x = model_version, y = TP)) + 
+        geom_boxplot(outlier.colour = "red", outlier.shape = 1, outlier.alpha = .2, outlier.size = .7) +
+        coord_flip() +
+        guides(fill = "none") +
+        labs(title = "True Positive Predictions on Test Users",
+             subtitle = "Based on Top 20 Recommendations",
+             x = "Model Type",
+             y = "True Positives")
+```
